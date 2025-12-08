@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 
 export default function Chat() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [inbox, setInbox] = useState([]); // now stores todo o histórico (enviadas + recebidas)
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [inboxError, setInboxError] = useState('');
@@ -29,27 +29,42 @@ export default function Chat() {
     try {
       if (!user?.id) throw new Error('Usuário não autenticado');
       
+      console.log('[Chat] Loading messages for user:', user.id);
+      
       // Buscar mensagens enviadas pelo usuário
       const { data: sentMessages, error: sentError } = await supabase
         .from('messages')
         .select('*')
-        .eq('sender_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('sender_id', user.id);
+      
+      console.log('[Chat] Sent messages:', sentMessages, 'Error:', sentError);
       
       // Buscar mensagens recebidas pelo usuário
       const { data: receivedMessages, error: receivedError } = await supabase
         .from('messages')
         .select('*')
-        .eq('receiver_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('receiver_id', user.id);
       
-      if (sentError || receivedError) {
-        throw sentError || receivedError;
+      console.log('[Chat] Received messages:', receivedMessages, 'Error:', receivedError);
+      
+      if (sentError) {
+        console.error('[Chat] Error loading sent messages:', sentError);
+        throw sentError;
+      }
+      if (receivedError) {
+        console.error('[Chat] Error loading received messages:', receivedError);
+        throw receivedError;
       }
       
-      // Combinar e ordenar por data
+      // Combinar e ordenar por data (usando sent_at que é a coluna da tabela)
       const msgArray = [...(sentMessages || []), ...(receivedMessages || [])]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        .sort((a, b) => {
+          const dateA = new Date(a.sent_at || 0);
+          const dateB = new Date(b.sent_at || 0);
+          return dateB - dateA; // Descendente (mais recentes primeiro)
+        });
+      
+      console.log('[Chat] Combined and sorted messages:', msgArray.length);
       
       // Buscar nomes dos participantes (remetente e destinatário)
       const ids = Array.from(new Set([
@@ -57,33 +72,76 @@ export default function Chat() {
         ...msgArray.map(m => String(m.receiver_id)).filter(Boolean)
       ]));
       
-      const missing = ids.filter(id => !nameMap[id]);
+      console.log('[Chat] Fetching names for IDs:', ids);
+      
+      // Buscar TODOS os perfis em uma única query
+      let profileMap = { ...nameMap };
+      const missing = ids.filter(id => !profileMap[id]);
+      
       if (missing.length > 0) {
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, name, email')
           .in('id', missing);
         
+        console.log('[Chat] Fetched profiles:', profiles, 'Error:', profileError);
+        
         if (!profileError && profiles) {
-          const newMap = {};
           profiles.forEach(p => {
-            const emailName = p.email ? p.email.split('@')[0] : null;
-            newMap[String(p.id)] = p.name || emailName || 'Usuário';
+            profileMap[String(p.id)] = {
+              name: p.name || p.email?.split('@')[0] || 'Usuário',
+              email: p.email || ''
+            };
           });
-          if (Object.keys(newMap).length > 0) setNameMap(prev => ({ ...prev, ...newMap }));
+          setNameMap(profileMap);
+        }
+      }
+
+      // Buscar títulos dos itens
+      const itemIds = Array.from(new Set(msgArray.map(m => m.item_id).filter(Boolean)));
+      const itemMap = {};
+      if (itemIds.length > 0) {
+        const { data: items, error: itemError } = await supabase
+          .from('items')
+          .select('id, title')
+          .in('id', itemIds);
+        
+        console.log('[Chat] Fetched items:', items, 'Error:', itemError);
+        
+        if (!itemError && items) {
+          items.forEach(item => {
+            itemMap[item.id] = item.title;
+          });
         }
       }
       
-      // Enriquecer mensagens com nomes disponíveis (cache ou padrão)
-      const enrichedMsgs = msgArray.map(m => ({
-        ...m,
-        sender_name: nameMap[String(m.sender_id)] || 'Usuário',
-        receiver_name: nameMap[String(m.receiver_id)] || 'Usuário',
-      }));
+      // Enriquecer mensagens com nomes e títulos disponíveis
+      const enrichedMsgs = msgArray.map(m => {
+        const isMine = String(m.sender_id) === String(user.id);
+        const otherId = isMine ? m.receiver_id : m.sender_id;
+        
+        const senderData = profileMap[String(m.sender_id)];
+        const receiverData = profileMap[String(m.receiver_id)];
+        const otherData = profileMap[String(otherId)];
+        
+        return {
+          ...m,
+          sender_name: senderData?.name || 'Usuário',
+          sender_email: senderData?.email || '',
+          receiver_name: receiverData?.name || 'Usuário',
+          receiver_email: receiverData?.email || '',
+          other_name: otherData?.name || 'Usuário',
+          other_email: otherData?.email || '',
+          other_id: otherId,
+          item_title: m.item_id ? itemMap[m.item_id] || `Item #${m.item_id}` : null,
+        };
+      });
       
+      console.log('[Chat] Enriched messages:', enrichedMsgs);
       setInbox(enrichedMsgs);
-      console.log('[Chat] Total messages:', msgArray.length, 'Unread:', msgArray.filter(m => m.read === false).length);
+      console.log('[Chat] Inbox set. Total messages:', enrichedMsgs.length, 'Unread:', enrichedMsgs.filter(m => m.read === false).length);
     } catch (e) {
+      console.error('[Chat] Error loading inbox:', e);
       setInboxError(e.message || 'Erro ao buscar mensagens');
     } finally {
       setLoadingInbox(false);
@@ -138,8 +196,7 @@ export default function Chat() {
         item_id: itemId || (selectedConversation?.item_id) || (replyTo?.item_id) || null,
         content: message,
         reply_to_id: replyTo ? replyTo.id : null,
-        read: false,
-        created_at: new Date().toISOString()
+        read: false
       };
       
       const { data: saved, error } = await supabase
@@ -175,7 +232,7 @@ export default function Chat() {
           const otherId = isMine ? saved.receiver_id : saved.sender_id;
           const key = `${otherId}-${saved.item_id || 'general'}`;
           if (key !== selectedKey) return prev;
-          const msgs = [...(prev.messages || []), enrichedSaved].sort((a, b) => new Date(a.created_at || a.sent_at || a.inserted_at || 0) - new Date(b.created_at || b.sent_at || b.inserted_at || 0));
+          const msgs = [...(prev.messages || []), enrichedSaved].sort((a, b) => new Date(b.sent_at || 0) - new Date(a.sent_at || 0));
           return { ...prev, messages: msgs, lastMessage: enrichedSaved };
         });
       }
@@ -239,8 +296,8 @@ export default function Chat() {
         convMap[key] = { ...m, other_id: otherId, messages: [m], lastMessage: m, unreadCount: (!isMine && m.read === false) ? 1 : 0 };
       } else {
         convMap[key].messages.push(m);
-        const msgDate = new Date(m.created_at || m.sent_at || m.inserted_at || 0);
-        const lastDate = new Date(convMap[key].lastMessage.created_at || convMap[key].lastMessage.sent_at || convMap[key].lastMessage.inserted_at || 0);
+        const msgDate = new Date(m.sent_at || 0);
+        const lastDate = new Date(convMap[key].lastMessage.sent_at || 0);
         if (msgDate > lastDate) convMap[key].lastMessage = m;
         if (!isMine && m.read === false) convMap[key].unreadCount++;
       }
@@ -311,8 +368,18 @@ export default function Chat() {
   });
 
   const conversationList = Object.values(conversations).sort((a, b) => 
-    new Date(b.lastMessage.created_at || b.lastMessage.sent_at || b.lastMessage.inserted_at || 0) - new Date(a.lastMessage.created_at || a.lastMessage.sent_at || a.lastMessage.inserted_at || 0)
+    new Date(b.lastMessage.sent_at || 0) - new Date(a.lastMessage.sent_at || 0)
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background-dark flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-surface-dark rounded-xl p-6 text-center border border-white/10">
+          <div className="text-text-secondary-dark font-semibold mb-2">Carregando...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -371,7 +438,9 @@ export default function Chat() {
               ) : (
                 conversationList.map((conv, idx) => {
                   const otherId = conv.other_id || conv.sender_id;
-                  const displayName = conv.sender_name || conv.receiver_name || nameMap[String(otherId)] || 'Usuário';
+                  const displayName = conv.other_name || 'Usuário';
+                  const displayEmail = conv.other_email || '';
+                  const displayItemTitle = conv.item_title || (conv.item_id ? `Item #${conv.item_id}` : 'Sem item');
                   return (
                   <a
                     key={idx}
@@ -393,8 +462,11 @@ export default function Chat() {
                         <p className="text-text-primary-dark text-base font-medium leading-normal truncate">
                           {displayName}
                         </p>
+                        <p className="text-text-secondary-dark text-xs font-normal leading-normal truncate">
+                          {displayEmail}
+                        </p>
                         <p className="text-text-secondary-dark text-sm font-normal leading-normal truncate">
-                          Item: {conv.item_title || conv.item_id || 'Sem item'}
+                          {displayItemTitle}
                         </p>
                         <p className="text-text-primary-dark text-sm font-normal leading-normal truncate">
                           {conv.lastMessage.content}
@@ -427,15 +499,18 @@ export default function Chat() {
                     <div 
                       className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" 
                       style={{ 
-                        backgroundImage: `url("https://ui-avatars.com/api/?name=${encodeURIComponent(selectedConversation.sender_name || nameMap[String(selectedConversation.sender_id)] || 'U')}&background=3B82F6&color=fff")` 
+                        backgroundImage: `url("https://ui-avatars.com/api/?name=${encodeURIComponent(selectedConversation.other_name || 'U')}&background=3B82F6&color=fff")` 
                       }}
                     />
                     <div>
                       <h3 className="font-semibold text-text-primary-dark">
-                        {selectedConversation.sender_name || selectedConversation.receiver_name || nameMap[String(selectedConversation.other_id)] || nameMap[String(selectedConversation.sender_id)] || 'Usuário'}
+                        {selectedConversation.other_name || 'Usuário'}
                       </h3>
-                      <a className="text-sm text-primary hover:underline cursor-pointer">
-                        Item: {selectedConversation.item_title || selectedConversation.item_id || 'Sem item'}
+                      <p className="text-sm text-text-secondary-dark">
+                        {selectedConversation.other_email || 'sem email'}
+                      </p>
+                      <a className="text-xs text-primary hover:underline cursor-pointer">
+                        {selectedConversation.item_title || (selectedConversation.item_id ? `Item #${selectedConversation.item_id}` : 'Sem item')}
                       </a>
                     </div>
                   </div>

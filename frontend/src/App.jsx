@@ -38,7 +38,7 @@ function AppContent() {
       <Route path="/search" element={<Search />} />
       <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
       <Route path="/map" element={<Map />} />
-      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
       <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
       <Route path="/profile/edit" element={<RequireAuth><EditProfile /></RequireAuth>} />
       <Route path="/register" element={<RegisterSupabase />} />

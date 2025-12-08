@@ -79,16 +79,12 @@ export default function Chat() {
         .eq('sender_id', user.id)
         .order('sent_at', { ascending: false });
       
-      console.log(`[Chat] Sent messages count: ${sentMessages?.length || 0}`);
-      
       // Buscar mensagens recebidas pelo usuário
       const { data: receivedMessages, error: receivedError } = await supabase
         .from('messages')
         .select('*')
         .eq('receiver_id', user.id)
         .order('sent_at', { ascending: false });
-      
-      console.log(`[Chat] Received messages count: ${receivedMessages?.length || 0}`);
       
       if (sentError) {
         console.error('[Chat] Error loading sent messages:', sentError);
@@ -103,7 +99,7 @@ export default function Chat() {
       const msgArray = [...(sentMessages || []), ...(receivedMessages || [])]
         .sort((a, b) => new Date(b.sent_at || 0) - new Date(a.sent_at || 0));
       
-      console.log(`[Chat] Total messages: ${msgArray.length}`);
+      if (!isPolling) console.log(`[Chat] Total messages: ${msgArray.length}`);
       
       // Buscar nomes dos participantes
       const ids = Array.from(new Set([
@@ -168,16 +164,21 @@ export default function Chat() {
         };
       });
       
-      console.log(`[Chat] Enriched messages: ${enrichedMsgs.length}, setting inbox...`);
+      // Comparar com a versão anterior para evitar re-renders desnecessários
+      const prevInboxIds = JSON.stringify(inbox.map(m => ({ id: m.id, read: m.read })));
+      const newInboxIds = JSON.stringify(enrichedMsgs.map(m => ({ id: m.id, read: m.read })));
       
-      // SEMPRE atualizar durante polling ou na primeira carga
-      setInbox(enrichedMsgs);
-      
-      console.log(`[Chat] Inbox state updated with ${enrichedMsgs.length} messages`);
-      
-      // Disparar evento de nova mensagem só na primeira carga
-      if (!isPolling) {
-        window.dispatchEvent(new CustomEvent('new-message'));
+      // Só atualizar se houver mudanças (novas mensagens ou status de leitura mudou)
+      if (prevInboxIds !== newInboxIds) {
+        setInbox(enrichedMsgs);
+        if (!isPolling) console.log('[Chat] Inbox updated - changes detected');
+        
+        // Disparar evento de nova mensagem só quando há mudanças
+        if (!isPolling) {
+          window.dispatchEvent(new CustomEvent('new-message'));
+        }
+      } else if (!isPolling) {
+        console.log('[Chat] Inbox loaded - no changes since last time');
       }
     } catch (e) {
       console.error('[Chat] Error loading inbox:', e);
@@ -195,11 +196,10 @@ export default function Chat() {
     // Carregar inbox inicial
     loadInbox(false);
     
-    // Polling a cada 800ms para garantir atualizações rápidas
+    // Polling a cada 3 segundos (reduzido de 800ms para evitar sobrecarga)
     const pollingInterval = setInterval(() => {
-      console.log('[Chat] Polling tick...');
       loadInbox(true);
-    }, 800);
+    }, 3000);
     
     return () => {
       clearInterval(pollingInterval);

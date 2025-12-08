@@ -1,3 +1,4 @@
 .env
+frontend/.env
 /venv
 frontend/src/supabaseClient.js

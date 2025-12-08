@@ -8,12 +8,14 @@ export default function ChatBadge() {
   const { unreadCount } = useUnreadMessages();
 
   return (
-    <button 
-      onClick={() => navigate(user ? '/chat' : '/login')}
-      className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-surface-dark text-text-secondary-dark hover:bg-white/10 hover:text-white transition-all relative"
-      title="Chat"
-    >
-      <span className="material-symbols-outlined text-xl">chat_bubble</span>
+    <div className="relative w-10 h-10">
+      <button 
+        onClick={() => navigate(user ? '/chat' : '/login')}
+        className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg bg-surface-dark text-text-secondary-dark hover:bg-white/10 hover:text-white transition-all"
+        title="Chat"
+      >
+        <span className="material-symbols-outlined text-xl">chat_bubble</span>
+      </button>
       
       {/* Badge com contador de mensagens não lidas */}
       {unreadCount > 0 && (
@@ -21,6 +23,6 @@ export default function ChatBadge() {
           {unreadCount > 9 ? '9+' : unreadCount}
         </span>
       )}
-    </button>
+    </div>
   );
 }

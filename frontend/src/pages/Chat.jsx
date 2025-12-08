@@ -12,6 +12,8 @@ export default function Chat() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [message, setMessage] = useState('');
+  const [selectedPhoto, setSelectedPhoto] = useState(null); // Arquivo de foto selecionado
+  const [photoPreview, setPhotoPreview] = useState(null); // Preview da foto
   const [receiverId, setReceiverId] = useState('');
   const [itemId, setItemId] = useState('');
   const [sending, setSending] = useState(false);
@@ -21,6 +23,39 @@ export default function Chat() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef(null);
+
+  // Handle photo selection
+  function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione apenas imagens');
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Arquivo muito grande (máximo 5MB)');
+      return;
+    }
+    
+    setSelectedPhoto(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoPreview(e.target?.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Clear photo selection
+  function clearPhotoSelection() {
+    setSelectedPhoto(null);
+    setPhotoPreview(null);
+  }
 
   // Busca inbox completa (enviadas + recebidas) e preenche nomes
   const loadInbox = async () => {
@@ -186,15 +221,38 @@ export default function Chat() {
     e.preventDefault();
     // if replying, receiverId comes from replyTo unless explicitly provided
     const to = selectedConversation?.other_id || selectedConversation?.sender_id || replyTo?.sender_id || receiverId;
-    if (!message || !to) return alert('Preencha o destinatário e a mensagem');
+    if ((!message && !selectedPhoto) || !to) return alert('Preencha o destinatário e a mensagem ou anexe uma foto');
     setSending(true);
     try {
+      let photoUrl = null;
+      
+      // Upload photo if selected
+      if (selectedPhoto) {
+        const fileName = `${user.id}-${Date.now()}-${selectedPhoto.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('chat-photos')
+          .upload(fileName, selectedPhoto, { upsert: false });
+        
+        if (uploadError) {
+          throw new Error(`Erro ao enviar foto: ${uploadError.message}`);
+        }
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('chat-photos')
+          .getPublicUrl(fileName);
+        
+        photoUrl = urlData?.publicUrl;
+        clearPhotoSelection();
+      }
+      
       const payload = {
         sender_id: user?.id,
         receiver_id: to,
         // if user didn't fill itemId but this is a reply, inherit item_id from replied message
         item_id: itemId || (selectedConversation?.item_id) || (replyTo?.item_id) || null,
         content: message,
+        photo_url: photoUrl, // Add photo URL to message
         reply_to_id: replyTo ? replyTo.id : null,
         read: false
       };
@@ -538,15 +596,24 @@ export default function Chat() {
                           />
                         )}
                         <div className={`relative flex flex-col gap-1 ${isMyMessage ? 'items-end' : ''}`}>
-                          <div className={`p-3 rounded-lg ${
-                            isMyMessage 
-                              ? 'bg-primary rounded-br-none max-w-lg' 
-                              : 'bg-panel-dark rounded-bl-none'
-                          }`}>
-                            <p className={`text-sm ${isMyMessage ? 'text-white' : 'text-text-primary-dark'}`}>
-                              {msg.content}
-                            </p>
-                          </div>
+                          {msg.photo_url && (
+                            <img 
+                              src={msg.photo_url} 
+                              alt="Chat photo" 
+                              className={`max-w-sm max-h-64 rounded-lg ${isMyMessage ? 'rounded-br-none' : 'rounded-bl-none'}`}
+                            />
+                          )}
+                          {msg.content && (
+                            <div className={`p-3 rounded-lg ${
+                              isMyMessage 
+                                ? 'bg-primary rounded-br-none max-w-lg' 
+                                : 'bg-panel-dark rounded-bl-none'
+                            }`}>
+                              <p className={`text-sm ${isMyMessage ? 'text-white' : 'text-text-primary-dark'}`}>
+                                {msg.content}
+                              </p>
+                            </div>
+                          )}
                           <span className={`text-xs text-text-secondary-dark ${isMyMessage ? 'pr-1' : 'pl-1'}`}>
                             {formatMessageTime(msg.created_at || msg.sent_at)}
                           </span>
@@ -559,7 +626,19 @@ export default function Chat() {
 
                 {/* Input Area */}
                 <div className="border-t border-white/10 p-4">
-                  <form onSubmit={handleSend} className="flex items-center gap-4 bg-panel-dark rounded-xl pr-2">
+                  {photoPreview && (
+                    <div className="mb-4 relative">
+                      <img src={photoPreview} alt="Preview" className="max-h-40 rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={clearPhotoSelection}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </div>
+                  )}
+                  <form onSubmit={handleSend} className="flex items-center gap-2 bg-panel-dark rounded-xl pr-2">
                     <input 
                       className="flex-1 bg-transparent border-none focus:ring-0 text-text-primary-dark placeholder:text-text-secondary-dark py-3 px-4" 
                       placeholder="Digite sua mensagem..." 
@@ -568,9 +647,22 @@ export default function Chat() {
                       onChange={(e) => setMessage(e.target.value)}
                       disabled={sending}
                     />
+                    
+                    {/* Photo Button */}
+                    <label className="flex items-center justify-center size-9 hover:bg-white/10 rounded-lg cursor-pointer transition-colors text-text-secondary-dark shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handlePhotoSelect}
+                        disabled={sending}
+                        className="hidden"
+                      />
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>image</span>
+                    </label>
+                    
                     <button 
                       type="submit"
-                      disabled={sending || !message.trim()}
+                      disabled={sending || (!message.trim() && !selectedPhoto)}
                       className="flex items-center justify-center size-9 bg-primary rounded-lg text-white hover:bg-blue-500 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>send</span>

@@ -1,6 +1,7 @@
 import SimpleSidebar from '../components/SimpleSidebar'
 import { useAuth } from '../contexts/AuthContext'
 import { useEffect, useState, useRef } from 'react'
+import { supabase } from '../supabaseClient'
 
 export default function Chat() {
   const { user } = useAuth();
@@ -26,48 +27,53 @@ export default function Chat() {
     setLoadingInbox(true);
     setInboxError('');
     try {
-      const token = localStorage.getItem('recover_token');
-      if (!token) throw new Error('Usuário não autenticado');
-      const res = await fetch('http://localhost:8000/chat/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'Erro ao buscar mensagens');
-      }
-      const json = await res.json();
-      const msgs = json || [];
-      // fetch nomes de participantes (remetente e destinatário)
+      if (!user?.id) throw new Error('Usuário não autenticado');
+      
+      // Buscar todas as mensagens (enviadas + recebidas)
+      const { data: msgs, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      const msgArray = msgs || [];
+      
+      // Buscar nomes dos participantes (remetente e destinatário)
       const ids = Array.from(new Set([
-        ...msgs.map(m => String(m.sender_id)).filter(Boolean),
-        ...msgs.map(m => String(m.receiver_id)).filter(Boolean)
+        ...msgArray.map(m => String(m.sender_id)).filter(Boolean),
+        ...msgArray.map(m => String(m.receiver_id)).filter(Boolean)
       ]));
+      
       const missing = ids.filter(id => !nameMap[id]);
       if (missing.length > 0) {
-        const fetches = missing.map(id => fetch(`http://localhost:8000/auth/users/${encodeURIComponent(id)}`)
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-        );
-        const results = await Promise.all(fetches);
-        const newMap = {};
-        results.forEach(r => {
-          if (r && r.id) {
-            const emailName = r.email ? r.email.split('@')[0] : null;
-            newMap[String(r.id)] = r.name || emailName || 'Usuário';
-          }
-        });
-        if (Object.keys(newMap).length > 0) setNameMap(prev => ({ ...prev, ...newMap }));
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, name, email')
+          .in('id', missing);
+        
+        if (!profileError && profiles) {
+          const newMap = {};
+          profiles.forEach(p => {
+            const emailName = p.email ? p.email.split('@')[0] : null;
+            newMap[String(p.id)] = p.name || emailName || 'Usuário';
+          });
+          if (Object.keys(newMap).length > 0) setNameMap(prev => ({ ...prev, ...newMap }));
+        }
       }
-      // sempre enrich com nomes disponíveis (payload ou cache) para evitar cair em ID
-      const enrichedMsgs = msgs.map(m => ({
+      
+      // Enriquecer mensagens com nomes disponíveis (cache ou padrão)
+      const enrichedMsgs = msgArray.map(m => ({
         ...m,
-        sender_name: m.sender_name || nameMap[String(m.sender_id)] || 'Usuário',
-        receiver_name: m.receiver_name || nameMap[String(m.receiver_id)] || 'Usuário',
+        sender_name: nameMap[String(m.sender_id)] || 'Usuário',
+        receiver_name: nameMap[String(m.receiver_id)] || 'Usuário',
       }));
+      
       setInbox(enrichedMsgs);
-      console.log('[Chat] Total messages:', msgs.length, 'Unread:', msgs.filter(m => m.read === false).length);
+      console.log('[Chat] Total messages:', msgArray.length, 'Unread:', msgArray.filter(m => m.read === false).length);
     } catch (e) {
-      setInboxError(e.message || 'Erro');
+      setInboxError(e.message || 'Erro ao buscar mensagens');
     } finally {
       setLoadingInbox(false);
     }
@@ -81,17 +87,17 @@ export default function Chat() {
   async function handleMarkAsRead(msg) {
     if (msg.read) return; // Já está lida
     
-    const token = localStorage.getItem('recover_token');
-    if (!token) return;
-    
     try {
       console.log('[Chat] Marking message as read:', msg.id);
-      const response = await fetch(`http://localhost:8000/chat/${msg.id}/mark-read`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { error } = await supabase
+        .from('messages')
+        .update({ 
+          read: true,
+          read_at: new Date().toISOString()
+        })
+        .eq('id', msg.id);
       
-      if (response.ok) {
+      if (!error) {
         console.log('[Chat] Message marked as read:', msg.id);
         // Atualizar a mensagem localmente
         setInbox(prevInbox => 
@@ -120,18 +126,21 @@ export default function Chat() {
         // if user didn't fill itemId but this is a reply, inherit item_id from replied message
         item_id: itemId || (selectedConversation?.item_id) || (replyTo?.item_id) || null,
         content: message,
-        reply_to_id: replyTo ? replyTo.id : null
+        reply_to_id: replyTo ? replyTo.id : null,
+        read: false,
+        created_at: new Date().toISOString()
       };
-      const res = await fetch('http://localhost:8000/chat/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'Erro ao enviar mensagem');
+      
+      const { data: saved, error } = await supabase
+        .from('messages')
+        .insert([payload])
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(error.message || 'Erro ao enviar mensagem');
       }
-      const saved = await res.json();
+      
       setMessage('');
       // Don't clear receiverId or itemId when in a conversation
       if (!selectedConversation) {
@@ -139,6 +148,7 @@ export default function Chat() {
         setItemId('');
       }
       setReplyTo(null);
+      
       // otimista: adiciona a mensagem enviada na lista atual (com nomes enriquecidos)
       const enrichedSaved = {
         ...saved,
@@ -171,22 +181,24 @@ export default function Chat() {
 
   async function markConversationAsRead(conv) {
     if (!conv || !user) return;
-    const token = localStorage.getItem('recover_token');
-    if (!token) return;
     const unread = (conv.messages || []).filter(m => String(m.receiver_id) === String(user.id) && m.read === false);
     if (unread.length === 0) return;
     try {
+      const now = new Date().toISOString();
       await Promise.all(unread.map(async (m) => {
         try {
-          await fetch(`http://localhost:8000/chat/${m.id}/mark-read`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          await supabase
+            .from('messages')
+            .update({ 
+              read: true,
+              read_at: now
+            })
+            .eq('id', m.id);
         } catch (err) {
           console.error('[Chat] Failed to mark message as read:', err);
         }
       }));
-      const now = new Date().toISOString();
+      
       setInbox(prev => prev.map(m => unread.find(u => u.id === m.id) ? { ...m, read: true, read_at: now } : m));
       window.dispatchEvent(new CustomEvent('messages-read'));
     } catch (e) {

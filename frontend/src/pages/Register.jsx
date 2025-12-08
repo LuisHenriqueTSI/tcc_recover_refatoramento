@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signUp } from '../services/supabaseAuth';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import CancelButton from '../components/CancelButton';
@@ -15,19 +16,14 @@ export default function Register() {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch('http://localhost:8000/users/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
-      });
-      if (res.ok) {
+      const res = await signUp(email, password, name);
+      if (res.data?.user) {
         navigate('/login');
       } else {
-        const data = await res.json();
-        setError(data.detail || 'Erro ao registrar');
+        setError(res.error?.message || 'Erro ao registrar');
       }
     } catch (err) {
-      setError('Erro de conexão');
+      setError(err.message || 'Erro ao registrar');
     }
   };
 

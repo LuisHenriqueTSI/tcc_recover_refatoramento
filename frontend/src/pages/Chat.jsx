@@ -29,16 +29,27 @@ export default function Chat() {
     try {
       if (!user?.id) throw new Error('Usuário não autenticado');
       
-      // Buscar todas as mensagens (enviadas + recebidas)
-      const { data: msgs, error } = await supabase
+      // Buscar mensagens enviadas pelo usuário
+      const { data: sentMessages, error: sentError } = await supabase
         .from('messages')
         .select('*')
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .eq('sender_id', user.id)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      // Buscar mensagens recebidas pelo usuário
+      const { data: receivedMessages, error: receivedError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('receiver_id', user.id)
+        .order('created_at', { ascending: false });
       
-      const msgArray = msgs || [];
+      if (sentError || receivedError) {
+        throw sentError || receivedError;
+      }
+      
+      // Combinar e ordenar por data
+      const msgArray = [...(sentMessages || []), ...(receivedMessages || [])]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
       // Buscar nomes dos participantes (remetente e destinatário)
       const ids = Array.from(new Set([

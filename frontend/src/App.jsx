@@ -28,31 +28,31 @@ function AppContent() {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Welcome />} />
-        <Route path="/welcome" element={<Welcome />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/login" element={<LoginSupabase />} />
-        <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-        <Route path="/register-item" element={<RequireAuth><RegisterItem /></RequireAuth>} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
-        <Route path="/map" element={<Map />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-        <Route path="/profile/edit" element={<RequireAuth><EditProfile /></RequireAuth>} />
-        <Route path="/register" element={<RegisterSupabase />} />
-      </Routes>
-    </Router>
+    <Routes>
+      <Route path="/" element={<Welcome />} />
+      <Route path="/welcome" element={<Welcome />} />
+      <Route path="/home" element={<Home />} />
+      <Route path="/login" element={<LoginSupabase />} />
+      <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+      <Route path="/register-item" element={<RequireAuth><RegisterItem /></RequireAuth>} />
+      <Route path="/search" element={<Search />} />
+      <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
+      <Route path="/map" element={<Map />} />
+      <Route path="/chat" element={<Chat />} />
+      <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+      <Route path="/profile/edit" element={<RequireAuth><EditProfile /></RequireAuth>} />
+      <Route path="/register" element={<RegisterSupabase />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
   );
 }
 

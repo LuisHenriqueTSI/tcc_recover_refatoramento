@@ -20,8 +20,11 @@ export default function LoginSupabase() {
     setError('');
     const { data, error } = await signIn(email, password);
     console.debug('[LoginSupabase] signIn result:', { data, error });
+    
     if (error) {
-      setError(error.message);
+      // error can be an Error object or have a message property
+      const errorMessage = error.message || error.toString();
+      setError(errorMessage);
     } else if (data?.session) {
       // Salva o token e estabelece o usuário no contexto imediatamente
       const token = data.session.access_token;

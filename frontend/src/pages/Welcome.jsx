@@ -16,6 +16,13 @@ export default function Welcome() {
     return () => clearInterval(interval);
   }, []);
 
+  // Se já está logado, redireciona para Home
+  useEffect(() => {
+    if (user) {
+      navigate('/home');
+    }
+  }, [user, navigate]);
+
   async function fetchStatistics() {
     const { data } = await getResolvedStatistics();
     if (data) {
@@ -29,12 +36,6 @@ export default function Welcome() {
     cat.category === 'Pets' || cat.category === 'Animal'
   )?.count || 0;
   const peopleConnected = Math.floor(totalItems * 2.5); // Estimativa de pessoas envolvidas
-
-  // Se já está logado, redireciona para Home
-  if (user) {
-    navigate('/home');
-    return null;
-  }
 
   return (
     <div className="relative flex min-h-screen w-full flex-col bg-background-dark text-text-primary-dark antialiased">

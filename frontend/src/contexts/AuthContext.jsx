@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { getUser as getUserProfile } from '../services/user';
 import { signOut } from '../services/supabaseAuth';
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -29,6 +29,12 @@ export function AuthProvider({ children }) {
         try {
           const u = await getUserProfile(t);
           console.debug('[Auth] loaded user:', u, 'attempt:', attempt + 1);
+          // If user is null, it means not authenticated (not an error)
+          if (u === null) {
+            setUser(null);
+            setIsAdmin(false);
+            break;
+          }
           setUser(u);
           if (u && (u.email === 'admin@email.com' || u.role === 'admin')) {
             setIsAdmin(true);
@@ -126,13 +132,28 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const value = { user, isAdmin, login, logout, loading, reloadProfile };
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, login, logout, loading, reloadProfile }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    console.error('useAuth must be used within an AuthProvider');
+    // Return a default context to prevent crashes
+    return { 
+      user: null, 
+      isAdmin: false, 
+      loading: true, 
+      login: async () => {}, 
+      logout: async () => {}, 
+      reloadProfile: async () => {} 
+    };
+  }
+  return context;
 }

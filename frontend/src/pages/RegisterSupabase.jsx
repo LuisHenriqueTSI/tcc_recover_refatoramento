@@ -2,6 +2,7 @@ import SimpleSidebar from '../components/SimpleSidebar';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signUp, signIn } from '../services/supabaseAuth';
+import { supabase } from '../supabaseClient';
 
 export default function RegisterSupabase() {
   const [email, setEmail] = useState('');
@@ -27,20 +28,25 @@ export default function RegisterSupabase() {
       return;
     }
 
-    // Try to sign in immediately to obtain token and sync profile via backend
+    // Try to sign in immediately and create profile in Supabase
     try {
       const signin = await signIn(email, password);
-      const token = signin?.data?.session?.access_token || signin?.data?.access_token || signin?.access_token;
-      if (token) {
-        await fetch('http://localhost:8000/auth/sync-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ name })
-        });
+      const user = signin?.data?.user;
+      
+      if (user) {
+        // Create profile in Supabase
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            name: name,
+            email: user.email,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
       }
     } catch (e) {
-      // ignore sync errors, user can login later
-      console.debug('sync-profile failed', e);
+      // ignore profile creation errors, user can complete profile later
+      console.debug('profile creation failed', e);
     }
 
     navigate('/login');

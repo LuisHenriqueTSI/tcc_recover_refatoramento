@@ -122,8 +122,8 @@ export default function Sidebar({
               <div 
                 className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-primary/50"
                 style={{ 
-                  backgroundImage: user?.avatar 
-                    ? `url("${user.avatar}")` 
+                  backgroundImage: user?.avatar_url 
+                    ? `url("${user.avatar_url}")` 
                     : 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDJ5Nfrwll3vgByg29e4RlsXLLlhYSq0zyIePQoXalVVdP1_bUmaTL0BpIZOV1jeSGZLS82JPVqVmW0y_2yUHYHwoUYrMdskJho2tnIQm7udpg01LUtUg7_ZF8rnxjz-CtcbqYsQUYIjtHxf1zlyaiGK_T4UYzi_grQvw1y_wSKnOaU_MNONOZ6dmpMie11MpP2dUAGnOotTAMC-LOCoRFJzQKzn0-es9puz6wYdlQZTaz9EWNODWWJKRtoz3bWsuSnm1aAAtlS1R2i")' 
                 }} 
               />
@@ -196,9 +196,9 @@ export default function Sidebar({
             onChange={e => onStatusChange(e.target.value)}
             className="form-input flex w-full rounded-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-white/10 bg-surface-dark h-10 px-4 text-sm"
           >
-            <option value="">Todos</option>
-            <option value="perdido">Perdido</option>
-            <option value="achado">Achado</option>
+            <option value="all">Todos</option>
+            <option value="lost">Perdido</option>
+            <option value="found">Achado</option>
           </select>
         </div>
 
@@ -210,12 +210,13 @@ export default function Sidebar({
             onChange={e => onCategoryChange(e.target.value)}
             className="form-input flex w-full rounded-lg text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-white/10 bg-surface-dark h-10 px-4 text-sm"
           >
-            <option value="">Todas</option>
-            <option value="electronics">Eletrônicos</option>
-            <option value="documents">Documentos</option>
-            <option value="keys">Chaves</option>
-            <option value="accessories">Acessórios</option>
-            <option value="other">Outros</option>
+            <option value="all">Todas</option>
+            <option value="animal">Animal</option>
+            <option value="document">Documento</option>
+            <option value="object">Objeto</option>
+            <option value="electronics">Eletrônico</option>
+            <option value="jewelry">Joia/Acessório</option>
+            <option value="clothing">Roupa</option>
           </select>
         </div>
 

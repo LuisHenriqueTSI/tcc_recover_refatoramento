@@ -95,9 +95,9 @@ export default function SimpleSidebar({ onCollapseChange }) {
               <div 
                 className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-primary/50"
                 style={{ 
-                  backgroundImage: user?.avatar 
-                    ? `url("${user.avatar}")` 
-                    : 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDJ5Nfrwll3vgByg29e4RlsXLLlhYSq0zyIePQoXalVVdP1_bUmaTL0BpIZOV1jeSGZLS82JPVqVmW0y_2yUHYHwoUYrMdskJho2tnIQm7udpg01LUtUg7_ZF8rnxjz-CtcbqYsQUYIjtHxf1zlyaiGK_T4UYzi_grQvw1y_wSKnOaU_MNONOZ6dmpMie11MpP2dUAGnOotTAMC-LOCoRFJzQKzn0-es9puz6wYdlQZTaz9EWNODWWJKRtoz3bWsuSnm1aAAtlS1R2i")' 
+                  backgroundImage: user?.avatar_url 
+                    ? `url("${user.avatar_url}")` 
+                    : `url("https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || user?.email || 'User')}&background=3B82F6&color=fff&size=40")` 
                 }} 
               />
               <div className="flex-1 text-left">

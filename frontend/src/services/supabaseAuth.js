@@ -15,7 +15,9 @@ export async function signUp(email, password, name) {
   try {
     const user = res?.data?.user || res?.user;
     if (user && user.id) {
-      await supabase.from('profiles').upsert({ id: user.id, name }).eq('id', user.id);
+      await supabase
+        .from('profiles')
+        .upsert({ id: user.id, name }, { onConflict: 'id' });
     }
   } catch (e) {
     // Do not fail signup if profile insert fails; log to console
@@ -26,7 +28,46 @@ export async function signUp(email, password, name) {
 }
 
 export async function signIn(email, password) {
-  return await supabase.auth.signInWithPassword({ email, password });
+  // First, try to sign in
+  const res = await supabase.auth.signInWithPassword({ email, password });
+  
+  // If there's an error from auth, return it immediately
+  if (res?.error) {
+    return res;
+  }
+  
+  // If sign in was successful, check if account is deleted
+  if (res?.data?.user) {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', res.data.user.id)
+        .single();
+      
+      if (error) {
+        console.debug('[signIn] Error fetching profile status:', error);
+        // If profile doesn't exist, allow login anyway
+        return res;
+      }
+      
+      // If account is marked as deleted, sign out and return error
+      if (profile?.status === 'deleted') {
+        console.warn('[signIn] User account is deleted:', res.data.user.id);
+        await supabase.auth.signOut();
+        // Return error object instead of throwing
+        return {
+          data: null,
+          error: new Error('Não existe essa conta')
+        };
+      }
+    } catch (e) {
+      console.debug('[signIn] Error checking account status:', e);
+      // Continue on other errors - don't block login for status check issues
+    }
+  }
+  
+  return res;
 }
 
 export async function getUser() {

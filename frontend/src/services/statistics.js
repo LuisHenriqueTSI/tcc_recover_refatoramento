@@ -55,7 +55,10 @@ export async function markItemAsResolved(itemId, token) {
 export async function getPendingNotificationItems(token) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Usuário não autenticado');
+    if (!user) {
+      console.debug('[getPendingNotificationItems] Usuário não autenticado');
+      return { data: [], error: null };
+    }
     
     // Buscar itens criados há mais de 1 minuto e não resolvidos
     const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
@@ -69,6 +72,6 @@ export async function getPendingNotificationItems(token) {
     return { data, error: null };
   } catch (error) {
     console.error('Error fetching pending items:', error);
-    return { data: null, error };
+    return { data: [], error };
   }
 }

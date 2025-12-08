@@ -160,7 +160,7 @@ export default function Profile() {
           <div className="max-w-5xl mx-auto flex flex-col gap-8">
             {/* Header do perfil */}
             <div className="bg-surface-dark/80 border border-white/10 rounded-2xl p-6 md:p-8 flex flex-col items-center gap-6 text-center">
-              <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full min-h-32 w-32 border-2 border-primary" style={{ backgroundImage: user?.avatar ? `url(${user.avatar})` : 'linear-gradient(135deg,#1f2937,#0f172a)' }} />
+              <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full min-h-32 w-32 border-2 border-primary" style={{ backgroundImage: user?.avatar_url ? `url(${user.avatar_url})` : `url("https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || user?.email || 'User')}&background=3B82F6&color=fff&size=128")` }} />
               <div className="flex flex-col items-center gap-1">
                 <p className="text-white text-[22px] font-bold leading-tight tracking-tight">{user.name}</p>
                 <p className="text-text-secondary-dark text-base">Membro</p>

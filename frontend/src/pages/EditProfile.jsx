@@ -21,6 +21,9 @@ export default function EditProfile() {
   const [success, setSuccess] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -108,35 +111,73 @@ export default function EditProfile() {
         return;
       }
 
+      console.log('[DeleteAccount] Starting account deletion for user:', authUser.id);
+
       // Delete user's items and related data (photos will cascade)
+      console.log('[DeleteAccount] Deleting items...');
       const { error: itemsError } = await supabase
         .from('items')
         .delete()
         .eq('owner_id', authUser.id);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('[DeleteAccount] Items deletion error:', itemsError);
+        throw itemsError;
+      }
 
       // Delete messages sent by user
+      console.log('[DeleteAccount] Deleting messages...');
       const { error: messagesError } = await supabase
         .from('messages')
         .delete()
         .eq('sender_id', authUser.id);
 
-      if (messagesError) throw messagesError;
+      if (messagesError) {
+        console.error('[DeleteAccount] Messages deletion error:', messagesError);
+        throw messagesError;
+      }
 
-      // Delete profile
+      // Mark profile as deleted (soft delete) instead of removing it
+      console.log('[DeleteAccount] Marking profile as deleted...');
       const { error: profileError } = await supabase
         .from('profiles')
-        .delete()
+        .update({ 
+          status: 'deleted',
+          updated_at: new Date().toISOString()
+        })
         .eq('id', authUser.id);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('[DeleteAccount] Profile update error:', profileError);
+        // If status column doesn't exist, just delete the profile instead
+        if (profileError.message?.includes('status')) {
+          console.log('[DeleteAccount] Status column not found, deleting profile instead...');
+          const { error: deleteError } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', authUser.id);
+          
+          if (deleteError) {
+            console.error('[DeleteAccount] Profile delete error:', deleteError);
+            throw deleteError;
+          }
+        } else {
+          throw profileError;
+        }
+      }
 
+      console.log('[DeleteAccount] Account marked as deleted, signing out...');
+      
       // Sign out user
       await supabase.auth.signOut();
       
-      // Redirect to home
-      navigate('/');
+      console.log('[DeleteAccount] Successfully deleted account and signed out');
+      setSuccess('Conta deletada com sucesso. Redirecionando...');
+      
+      // Redirect to home after a short delay
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
       
     } catch (error) {
       console.error('Error deleting account:', error);
@@ -146,6 +187,107 @@ export default function EditProfile() {
       setShowDeleteModal(false);
     }
   }
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor, selecione uma imagem válida');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('A imagem deve ter no máximo 5MB');
+      return;
+    }
+
+    setAvatarFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return;
+
+    setUploadingAvatar(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      if (!authUser) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      console.log('Starting avatar upload for user:', authUser.id);
+
+      // Upload to Supabase Storage
+      const fileExt = avatarFile.name.split('.').pop();
+      const fileName = `${authUser.id}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      console.log('Uploading file:', filePath);
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('profile-photos')
+        .upload(filePath, avatarFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Upload successful:', data);
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('profile-photos')
+        .getPublicUrl(filePath);
+
+      console.log('Public URL:', urlData.publicUrl);
+
+      // Update profile with avatar URL
+      const { data: updateData, error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+          avatar_url: urlData.publicUrl,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', authUser.id);
+
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw updateError;
+      }
+
+      console.log('Profile updated:', updateData);
+
+      // Reload profile to get updated avatar
+      await reloadProfile();
+      
+      setSuccess('Foto de perfil atualizada com sucesso!');
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      setError(error.message || 'Erro ao fazer upload da foto');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   return (
     <div className="relative flex min-h-screen w-full flex-col bg-background-dark">
@@ -163,22 +305,58 @@ export default function EditProfile() {
             <div className="flex flex-col items-center gap-4 p-6 text-center sm:p-8">
               <div className="relative h-32 w-32">
                 <div 
-                  className="h-full w-full rounded-full bg-cover bg-center"
+                  className="h-full w-full rounded-full bg-cover bg-center border-2 border-surface-dark"
                   style={{ 
-                    backgroundImage: user?.avatar 
-                      ? `url("${user.avatar}")` 
-                      : 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDJ5Nfrwll3vgByg29e4RlsXLLlhYSq0zyIePQoXalVVdP1_bUmaTL0BpIZOV1jeSGZLS82JPVqVmW0y_2yUHYHwoUYrMdskJho2tnIQm7udpg01LUtUg7_ZF8rnxjz-CtcbqYsQUYIjtHxf1zlyaiGK_T4UYzi_grQvw1y_wSKnOaU_MNONOZ6dmpMie11MpP2dUAGnOotTAMC-LOCoRFJzQKzn0-es9puz6wYdlQZTaz9EWNODWWJKRtoz3bWsuSnm1aAAtlS1R2i")'
+                    backgroundImage: avatarPreview 
+                      ? `url("${avatarPreview}")` 
+                      : user?.avatar_url 
+                        ? `url("${user.avatar_url}")` 
+                        : `url("https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || user?.email || 'User')}&background=3B82F6&color=fff&size=128")`
                   }}
                 />
-                <button 
-                  type="button"
-                  className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface-dark bg-primary text-white transition-transform hover:scale-110"
+                <label 
+                  htmlFor="avatar-upload"
+                  className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface-dark bg-primary text-white transition-transform hover:scale-110 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-xl">edit</span>
-                </button>
+                  <input 
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                </label>
               </div>
               <div>
-                <p className="text-lg font-bold text-text-light">Alterar foto</p>
+                {avatarFile ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm font-bold text-text-light">{avatarFile.name}</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAvatarUpload}
+                        disabled={uploadingAvatar}
+                        className="px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:opacity-90 disabled:opacity-50"
+                      >
+                        {uploadingAvatar ? 'Enviando...' : 'Salvar Foto'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarFile(null);
+                          setAvatarPreview(null);
+                        }}
+                        disabled={uploadingAvatar}
+                        className="px-4 py-2 text-sm font-bold text-text-light/80 bg-surface-dark rounded-lg hover:bg-surface-dark/70 disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-lg font-bold text-text-light">Alterar foto</p>
+                )}
                 <p className="text-sm text-text-light/60">PNG ou JPG (máx. 800x800px)</p>
               </div>
             </div>

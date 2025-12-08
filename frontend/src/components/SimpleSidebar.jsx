@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import RecoverLogo from '../assets/recover-logo.svg';
+import ChatBadge from './ChatBadge';
 import NotificationBell from './NotificationBell';
 
 export default function SimpleSidebar({ onCollapseChange }) {
@@ -73,13 +74,7 @@ export default function SimpleSidebar({ onCollapseChange }) {
             <span className="material-symbols-outlined text-lg">add_circle</span>
             <span>Publicar</span>
           </button>
-          <button 
-            onClick={() => navigate(user ? '/chat' : '/login')}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-surface-dark text-text-secondary-dark hover:bg-white/10 hover:text-white transition-all"
-            title="Chat"
-          >
-            <span className="material-symbols-outlined text-xl">chat_bubble</span>
-          </button>
+          <ChatBadge />
           
           {/* Notification Bell */}
           {user && <NotificationBell />}

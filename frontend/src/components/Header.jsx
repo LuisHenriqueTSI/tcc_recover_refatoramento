@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useRef, useEffect } from 'react';
+import ChatBadge from './ChatBadge';
 import NotificationBell from './NotificationBell';
 
 export default function Header({ showSearch = true, searchValue = '', onSearchChange }) {
@@ -70,13 +71,7 @@ export default function Header({ showSearch = true, searchValue = '', onSearchCh
           <span className="material-symbols-outlined text-xl">add_circle</span>
           <span className="hidden md:inline">Publicar Item</span>
         </button>
-        <button 
-          onClick={() => navigate(user ? '/chat' : '/login')}
-          className="flex h-11 w-11 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-surface-dark text-text-secondary-dark hover:bg-white/10 hover:text-white transition-all"
-          title="Chat"
-        >
-          <span className="material-symbols-outlined text-xl">chat_bubble</span>
-        </button>
+        <ChatBadge />
         
         {/* Notification Bell Component */}
         {user && <NotificationBell />}

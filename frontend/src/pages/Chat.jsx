@@ -185,6 +185,28 @@ export default function Chat() {
 
   useEffect(() => {
     if (user) loadInbox();
+    
+    // Listener para novas mensagens em tempo real
+    const subscription = supabase
+      .channel(`messages:receiver_id=eq.${user?.id}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `receiver_id=eq.${user?.id}`
+        },
+        (payload) => {
+          console.log('[Chat] New message received:', payload.new);
+          loadInbox(); // Recarregar inbox
+          window.dispatchEvent(new CustomEvent('new-message'));
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [user]);
 
   // Marcar mensagem como lida quando clicar nela
@@ -311,6 +333,11 @@ export default function Chat() {
     if (unread.length === 0) return;
     try {
       const now = new Date().toISOString();
+      
+      // Atualizar localmente PRIMEIRO (feedback imediato)
+      setInbox(prev => prev.map(m => unread.find(u => u.id === m.id) ? { ...m, read: true, read_at: now } : m));
+      
+      // Depois atualizar no banco
       await Promise.all(unread.map(async (m) => {
         try {
           await supabase
@@ -320,12 +347,13 @@ export default function Chat() {
               read_at: now
             })
             .eq('id', m.id);
+          console.log('[Chat] Message marked as read:', m.id);
         } catch (err) {
           console.error('[Chat] Failed to mark message as read:', err);
         }
       }));
       
-      setInbox(prev => prev.map(m => unread.find(u => u.id === m.id) ? { ...m, read: true, read_at: now } : m));
+      // Disparar evento para atualizar contador
       window.dispatchEvent(new CustomEvent('messages-read'));
     } catch (e) {
       console.error('[Chat] Error marking conversation read:', e);

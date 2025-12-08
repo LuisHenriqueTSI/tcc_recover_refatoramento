@@ -1,10 +1,13 @@
 import SimpleSidebar from '../components/SimpleSidebar'
 import { useAuth } from '../contexts/AuthContext'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 
 export default function Chat() {
   const { user, loading } = useAuth();
+  
+  console.log('[Chat] Component rendered. Loading:', loading, 'User:', user?.id);
+  
   const [inbox, setInbox] = useState([]); // now stores todo o histórico (enviadas + recebidas)
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [inboxError, setInboxError] = useState('');
@@ -58,29 +61,34 @@ export default function Chat() {
   }
 
   // Busca inbox completa (enviadas + recebidas) e preenche nomes
-  const loadInbox = async () => {
-    setLoadingInbox(true);
+  const loadInbox = useCallback(async (isPolling = false) => {
+    if (!isPolling) {
+      console.log('[Chat] Initial load starting...');
+      setLoadingInbox(true);
+    }
     setInboxError('');
     try {
       if (!user?.id) throw new Error('Usuário não autenticado');
       
-      console.log('[Chat] Loading messages for user:', user.id);
+      console.log(`[Chat] Loading messages (isPolling=${isPolling})...`);
       
       // Buscar mensagens enviadas pelo usuário
       const { data: sentMessages, error: sentError } = await supabase
         .from('messages')
         .select('*')
-        .eq('sender_id', user.id);
+        .eq('sender_id', user.id)
+        .order('sent_at', { ascending: false });
       
-      console.log('[Chat] Sent messages:', sentMessages, 'Error:', sentError);
+      console.log(`[Chat] Sent messages count: ${sentMessages?.length || 0}`);
       
       // Buscar mensagens recebidas pelo usuário
       const { data: receivedMessages, error: receivedError } = await supabase
         .from('messages')
         .select('*')
-        .eq('receiver_id', user.id);
+        .eq('receiver_id', user.id)
+        .order('sent_at', { ascending: false });
       
-      console.log('[Chat] Received messages:', receivedMessages, 'Error:', receivedError);
+      console.log(`[Chat] Received messages count: ${receivedMessages?.length || 0}`);
       
       if (sentError) {
         console.error('[Chat] Error loading sent messages:', sentError);
@@ -91,25 +99,18 @@ export default function Chat() {
         throw receivedError;
       }
       
-      // Combinar e ordenar por data (usando sent_at que é a coluna da tabela)
+      // Combinar e ordenar por data
       const msgArray = [...(sentMessages || []), ...(receivedMessages || [])]
-        .sort((a, b) => {
-          const dateA = new Date(a.sent_at || 0);
-          const dateB = new Date(b.sent_at || 0);
-          return dateB - dateA; // Descendente (mais recentes primeiro)
-        });
+        .sort((a, b) => new Date(b.sent_at || 0) - new Date(a.sent_at || 0));
       
-      console.log('[Chat] Combined and sorted messages:', msgArray.length);
+      console.log(`[Chat] Total messages: ${msgArray.length}`);
       
-      // Buscar nomes dos participantes (remetente e destinatário)
+      // Buscar nomes dos participantes
       const ids = Array.from(new Set([
         ...msgArray.map(m => String(m.sender_id)).filter(Boolean),
         ...msgArray.map(m => String(m.receiver_id)).filter(Boolean)
       ]));
       
-      console.log('[Chat] Fetching names for IDs:', ids);
-      
-      // Buscar TODOS os perfis em uma única query
       let profileMap = { ...nameMap };
       const missing = ids.filter(id => !profileMap[id]);
       
@@ -118,8 +119,6 @@ export default function Chat() {
           .from('profiles')
           .select('id, name, email')
           .in('id', missing);
-        
-        console.log('[Chat] Fetched profiles:', profiles, 'Error:', profileError);
         
         if (!profileError && profiles) {
           profiles.forEach(p => {
@@ -141,8 +140,6 @@ export default function Chat() {
           .select('id, title')
           .in('id', itemIds);
         
-        console.log('[Chat] Fetched items:', items, 'Error:', itemError);
-        
         if (!itemError && items) {
           items.forEach(item => {
             itemMap[item.id] = item.title;
@@ -150,11 +147,10 @@ export default function Chat() {
         }
       }
       
-      // Enriquecer mensagens com nomes e títulos disponíveis
+      // Enriquecer mensagens
       const enrichedMsgs = msgArray.map(m => {
         const isMine = String(m.sender_id) === String(user.id);
         const otherId = isMine ? m.receiver_id : m.sender_id;
-        
         const senderData = profileMap[String(m.sender_id)];
         const receiverData = profileMap[String(m.receiver_id)];
         const otherData = profileMap[String(otherId)];
@@ -172,42 +168,43 @@ export default function Chat() {
         };
       });
       
-      console.log('[Chat] Enriched messages:', enrichedMsgs);
+      console.log(`[Chat] Enriched messages: ${enrichedMsgs.length}, setting inbox...`);
+      
+      // SEMPRE atualizar durante polling ou na primeira carga
       setInbox(enrichedMsgs);
-      console.log('[Chat] Inbox set. Total messages:', enrichedMsgs.length, 'Unread:', enrichedMsgs.filter(m => m.read === false).length);
+      
+      console.log(`[Chat] Inbox state updated with ${enrichedMsgs.length} messages`);
+      
+      // Disparar evento de nova mensagem só na primeira carga
+      if (!isPolling) {
+        window.dispatchEvent(new CustomEvent('new-message'));
+      }
     } catch (e) {
       console.error('[Chat] Error loading inbox:', e);
-      setInboxError(e.message || 'Erro ao buscar mensagens');
+      if (!isPolling) setInboxError(e.message || 'Erro ao buscar mensagens');
     } finally {
-      setLoadingInbox(false);
+      if (!isPolling) setLoadingInbox(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    if (user) loadInbox();
+    if (!user) return;
     
-    // Listener para novas mensagens em tempo real
-    const subscription = supabase
-      .channel(`messages:receiver_id=eq.${user?.id}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `receiver_id=eq.${user?.id}`
-        },
-        (payload) => {
-          console.log('[Chat] New message received:', payload.new);
-          loadInbox(); // Recarregar inbox
-          window.dispatchEvent(new CustomEvent('new-message'));
-        }
-      )
-      .subscribe();
+    console.log('[Chat] User loaded, starting polling:', user.id);
+    
+    // Carregar inbox inicial
+    loadInbox(false);
+    
+    // Polling a cada 800ms para garantir atualizações rápidas
+    const pollingInterval = setInterval(() => {
+      console.log('[Chat] Polling tick...');
+      loadInbox(true);
+    }, 800);
     
     return () => {
-      subscription.unsubscribe();
+      clearInterval(pollingInterval);
     };
-  }, [user]);
+  }, [user, loadInbox]);
 
   // Marcar mensagem como lida quando clicar nela
   async function handleMarkAsRead(msg) {

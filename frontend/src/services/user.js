@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient';
 
 // Serviço para obter dados do usuário autenticado
-export async function getUser(token) {
+export async function getUser() {
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     

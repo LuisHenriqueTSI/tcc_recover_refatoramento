@@ -33,7 +33,7 @@ export async function getResolvedStatistics() {
   }
 }
 
-export async function markItemAsResolved(itemId, token) {
+export async function markItemAsResolved(itemId) {
   try {
     const { data, error } = await supabase
       .from('items')
@@ -52,7 +52,7 @@ export async function markItemAsResolved(itemId, token) {
   }
 }
 
-export async function getPendingNotificationItems(token) {
+export async function getPendingNotificationItems() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

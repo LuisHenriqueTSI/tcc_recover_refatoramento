@@ -117,7 +117,6 @@ export default function RegisterItem() {
     setError('');
 
     try {
-      const token = localStorage.getItem('recover_token');
       const itemData = {
         title,
         description,
@@ -138,47 +137,59 @@ export default function RegisterItem() {
 
       let createdItemData;
       if (editingItem) {
-        await updateItem(editingItem.id, itemData, token);
+        await updateItem(editingItem.id, itemData);
         setSuccess(true);
         setTimeout(() => navigate('/home'), 2000);
       } else {
-        createdItemData = await registerItem(itemData, token);
+        createdItemData = await registerItem(itemData);
         setCreatedItem(createdItemData);
         console.log('[RegisterItem] Item criado:', createdItemData);
 
         // Upload photos to Supabase Storage
-        for (const photo of photos) {
-          try {
-            const fileExt = photo.file.name.split('.').pop();
-            const fileName = `${createdItemData.id}/${Date.now()}.${fileExt}`;
-            
-            console.log('[RegisterItem] Fazendo upload:', fileName);
-            
-            // Upload para o Supabase Storage
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('item-photos')
-              .upload(fileName, photo.file);
+        if (photos && photos.length > 0) {
+          console.log('[RegisterItem] Iniciando upload de', photos.length, 'fotos');
+          for (const photo of photos) {
+            try {
+              const fileExt = photo.file.name.split('.').pop();
+              const fileName = `${createdItemData.id}/${Date.now()}.${fileExt}`;
+              
+              console.log('[RegisterItem] Fazendo upload:', fileName);
+              
+              // Upload para o Supabase Storage
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('item-photos')
+                .upload(fileName, photo.file);
 
-            if (uploadError) {
-              console.error('[RegisterItem] Erro ao fazer upload:', uploadError);
-              continue;
+              if (uploadError) {
+                console.error('[RegisterItem] Erro ao fazer upload:', uploadError);
+                setError(`Erro ao fazer upload da foto: ${uploadError.message}`);
+                continue;
+              }
+
+              console.log('[RegisterItem] Upload bem-sucedido:', uploadData);
+
+              // Obter URL pública
+              const { data: { publicUrl } } = supabase.storage
+                .from('item-photos')
+                .getPublicUrl(fileName);
+
+              console.log('[RegisterItem] URL pública:', publicUrl);
+
+              // Salvar referência no banco
+              try {
+                const savedPhoto = await saveItemPhoto(createdItemData.id, publicUrl);
+                console.log('[RegisterItem] Foto salva no banco:', savedPhoto);
+              } catch (dbErr) {
+                console.error('[RegisterItem] Erro ao salvar foto no banco:', dbErr);
+                setError(`Erro ao salvar foto no banco: ${dbErr.message}`);
+              }
+            } catch (err) {
+              console.error('[RegisterItem] Erro ao processar foto:', err);
+              setError(`Erro ao processar foto: ${err.message}`);
             }
-
-            console.log('[RegisterItem] Upload bem-sucedido:', uploadData);
-
-            // Obter URL pública
-            const { data: { publicUrl } } = supabase.storage
-              .from('item-photos')
-              .getPublicUrl(fileName);
-
-            console.log('[RegisterItem] URL pública:', publicUrl);
-
-            // Salvar referência no banco
-            const savedPhoto = await saveItemPhoto(createdItemData.id, publicUrl, token);
-            console.log('[RegisterItem] Foto salva no banco:', savedPhoto);
-          } catch (err) {
-            console.error('[RegisterItem] Erro ao processar foto:', err);
           }
+        } else {
+          console.log('[RegisterItem] Nenhuma foto selecionada');
         }
 
         setSuccess(true);

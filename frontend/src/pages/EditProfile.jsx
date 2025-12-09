@@ -38,10 +38,8 @@ export default function EditProfile() {
         setLinkedin(user.linkedin || '');
         return;
       }
-      const token = localStorage.getItem('recover_token');
-      if (!token) return;
       try {
-        const u = await getUserProfile(token);
+        const u = await getUserProfile();
         setName(u.name || '');
         setEmail(u.email || '');
         setPhone(u.phone || '');

@@ -129,9 +129,8 @@ export default function Home() {
 
   async function handleDelete(id) {
     if (!confirm('Tem certeza que deseja excluir este item?')) return;
-    const token = localStorage.getItem('recover_token');
     try {
-      await deleteItem(id, token);
+      await deleteItem(id);
       setItems(prev => prev.filter(i => i.id !== id));
     } catch (err) {
       setError(err.message || 'Erro ao deletar item');

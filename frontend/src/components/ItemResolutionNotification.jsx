@@ -15,14 +15,8 @@ export default function ItemResolutionNotification() {
   }, []);
 
   async function checkPendingItems() {
-    const token = localStorage.getItem('recover_token');
-    if (!token) {
-      console.log('[ItemResolutionNotification] No token found');
-      return;
-    }
-
     console.log('[ItemResolutionNotification] Checking for pending items...');
-    const { data, error } = await getPendingNotificationItems(token);
+    const { data, error } = await getPendingNotificationItems();
     
     if (error) {
       console.error('[ItemResolutionNotification] Error fetching pending items:', error);
@@ -41,8 +35,7 @@ export default function ItemResolutionNotification() {
 
   async function handleYes(item) {
     setLoading(true);
-    const token = localStorage.getItem('recover_token');
-    const { data, error } = await markItemAsResolved(item.id, token);
+    const { data, error } = await markItemAsResolved(item.id);
     
     if (error) {
       alert(error.message || 'Erro ao marcar item como resolvido');

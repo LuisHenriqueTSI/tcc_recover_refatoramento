@@ -26,12 +26,11 @@ export default function LoginSupabase() {
       const errorMessage = error.message || error.toString();
       setError(errorMessage);
     } else if (data?.session) {
-      // Salva o token e estabelece o usuário no contexto imediatamente
-      const token = data.session.access_token;
+      // Login successful - user is authenticated with Supabase
       const supabaseUser = data.user || null;
-      console.debug('[LoginSupabase] token and supabaseUser:', { token, supabaseUser });
+      console.debug('[LoginSupabase] logged in user:', supabaseUser);
       try {
-        await login(token, supabaseUser);
+        await login(supabaseUser);
         navigate('/');
       } catch (e) {
         console.debug('[Login] login helper failed', e);

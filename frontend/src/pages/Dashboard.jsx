@@ -66,8 +66,7 @@ export default function Dashboard() {
     }
 
     setResolvingItemId(itemId);
-    const token = localStorage.getItem('recover_token');
-    const { data, error } = await markItemAsResolved(itemId, token);
+    const { data, error } = await markItemAsResolved(itemId);
     
     if (error) {
       alert(error.message || 'Erro ao marcar item como resolvido');

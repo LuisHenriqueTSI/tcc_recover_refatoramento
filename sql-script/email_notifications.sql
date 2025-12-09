@@ -16,13 +16,16 @@ language plpgsql
 security definer
 as $$
 declare
-  endpoint text := 'https://<PROJECT_REF>.functions.supabase.co/notify-message';
+  endpoint text := 'https://uiegfwnlphfblvzupziu.functions.supabase.co/notify-message';
   secret text := current_setting('app.settings.function_secret', true);
+  anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpZWdmd25scGhmYmx2enVweml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNTM0ODQsImV4cCI6MjA3NTkyOTQ4NH0.zm6OPTKRUnQVfy7FdTlLMtHpehaVZUCpoBgyF3nXB04';
 begin
   perform net.http_post(
     url := endpoint,
-    headers := jsonb_build_object('Content-Type','application/json') ||
-               case when secret is not null then jsonb_build_object('x-function-secret', secret) else '{}'::jsonb end,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || anon_key
+    ) || case when secret is not null then jsonb_build_object('x-function-secret', secret) else '{}'::jsonb end,
     body := jsonb_build_object('record', row_to_json(NEW))
   );
   return NEW;
@@ -42,8 +45,9 @@ language plpgsql
 security definer
 as $$
 declare
-  endpoint text := 'https://<PROJECT_REF>.functions.supabase.co/notify-item-found';
+  endpoint text := 'https://uiegfwnlphfblvzupziu.functions.supabase.co/notify-item-found';
   secret text := current_setting('app.settings.function_secret', true);
+  anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpZWdmd25scGhmYmx2enVweml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNTM0ODQsImV4cCI6MjA3NTkyOTQ4NH0.zm6OPTKRUnQVfy7FdTlLMtHpehaVZUCpoBgyF3nXB04';
 begin
   -- Only fire when status toggles to found/true
   if (coalesce(old.status, 'pending') = 'found' or coalesce(old.found, false) = true) then
@@ -55,8 +59,10 @@ begin
 
   perform net.http_post(
     url := endpoint,
-    headers := jsonb_build_object('Content-Type','application/json') ||
-               case when secret is not null then jsonb_build_object('x-function-secret', secret) else '{}'::jsonb end,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || anon_key
+    ) || case when secret is not null then jsonb_build_object('x-function-secret', secret) else '{}'::jsonb end,
     body := jsonb_build_object('record', row_to_json(NEW), 'old_record', row_to_json(OLD))
   );
   return NEW;

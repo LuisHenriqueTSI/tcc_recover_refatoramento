@@ -1,21 +1,47 @@
+// @ts-nocheck
+/// <reference types="https://deno.land/std@0.224.0/types.d.ts" />
 // Edge Function: notify-message
 // Triggered via Postgres trigger (net.http_post) on messages inserts.
-// Sends an email to the recipient with a link to the chat.
+// Sends an email to the recipient via Brevo API.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendEmail } from "../_shared/emailClient.ts";
 
-serve(async (req) => {
+// Send email via Brevo API
+async function sendEmail(payload) {
+  const smtpKey = Deno.env.get("SMTP_USERNAME");
+  const senderEmail = Deno.env.get("SMTP_SENDER_EMAIL");
+  const senderName = Deno.env.get("SMTP_SENDER_NAME") ?? "Recover";
+
+  if (!smtpKey || !senderEmail) {
+    console.error("[emailClient] Missing Brevo env vars");
+    throw new Error("Brevo configuration is incomplete");
+  }
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": smtpKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: payload.to }],
+      subject: payload.subject,
+      textContent: payload.text,
+      htmlContent: payload.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("[sendEmail] Brevo API error:", error);
+    throw new Error(`Failed to send email: ${response.status}`);
+  }
+}
+
+serve(async (req: Request) => {
   try {
-    const functionSecret = Deno.env.get("FUNCTION_SECRET");
-    if (functionSecret) {
-      const headerSecret = req.headers.get("x-function-secret");
-      if (headerSecret !== functionSecret) {
-        return new Response("Forbidden", { status: 403 });
-      }
-    }
-
     const payload = await req.json();
     const record = payload.record;
 
@@ -23,8 +49,8 @@ serve(async (req) => {
       return new Response("Missing record", { status: 400 });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseUrl = Deno.env.get("SB_URL");
+    const serviceRoleKey = Deno.env.get("SB_SERVICE_ROLE_KEY");
     const frontendUrl = Deno.env.get("FRONTEND_URL") ?? "https://recover.app";
 
     if (!supabaseUrl || !serviceRoleKey) {
@@ -38,7 +64,7 @@ serve(async (req) => {
     const { data: recipientProfile, error: recipientError } = await supabase
       .from("profiles")
       .select("email, name")
-      .eq("id", record.recipient_id)
+      .eq("id", record.receiver_id)
       .single();
 
     if (recipientError || !recipientProfile?.email) {

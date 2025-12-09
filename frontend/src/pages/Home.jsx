@@ -407,6 +407,37 @@ export default function Home() {
                   <span>💬</span>
                   <span>Contato</span>
                 </button>
+                {selectedItem.status !== 'found' && (
+                  <button
+                    onClick={async () => {
+                      if (confirm('Você encontrou este item? O proprietário será notificado por email.')) {
+                        try {
+                          const { error } = await supabase
+                            .from('items')
+                            .update({ status: 'found' })
+                            .eq('id', selectedItem.id);
+                          
+                          if (error) throw error;
+                          
+                          alert('✅ Item marcado como encontrado! O proprietário receberá um email.');
+                          setSelectedItem(null);
+                          // Recarregar itens
+                          const { data } = await supabase
+                            .from('items')
+                            .select('*')
+                            .order('created_at', { ascending: false });
+                          setItems(data || []);
+                        } catch (err) {
+                          alert('Erro ao marcar item: ' + err.message);
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition shadow-md hover:shadow-lg"
+                  >
+                    <span>✅</span>
+                    <span>Encontrei este Item</span>
+                  </button>
+                )}
               </div>
             )}
 

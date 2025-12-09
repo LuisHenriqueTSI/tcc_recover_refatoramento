@@ -58,9 +58,9 @@ serve(async (req: Request) => {
       return new Response("Missing record", { status: 400 });
     }
 
-    // Only act when status transitioned to "found" (or boolean true)
-    const wasFound = oldRecord?.status === "found" || oldRecord?.found === true;
-    const isFound = record.status === "found" || record.found === true;
+    // Only act when status transitioned to "found"
+    const wasFound = oldRecord?.status === "found";
+    const isFound = record.status === "found";
     if (wasFound || !isFound) {
       return new Response("No change to found state", { status: 200 });
     }

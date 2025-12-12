@@ -145,7 +145,7 @@ export default function Profile() {
         />
         <div>
           <p className="text-white text-sm font-semibold leading-normal truncate">{item.title}</p>
-          <p className="text-text-secondary-dark text-xs leading-normal">{item.item_type === 'lost' ? 'Perdido' : 'Encontrado'}</p>
+          <p className="text-text-secondary-dark text-xs leading-normal">Perdido</p>
           <p className="text-text-secondary-dark text-xs leading-normal">Status: {item.resolved ? 'Resolvido' : 'Ativo'}</p>
         </div>
       </div>

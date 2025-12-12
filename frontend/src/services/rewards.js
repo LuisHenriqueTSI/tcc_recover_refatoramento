@@ -76,9 +76,9 @@ export async function getRewardByItemId(itemId) {
     .select('*')
     .eq('item_id', itemId)
     .eq('status', 'active')
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+  if (error) {
     console.error('[getRewardByItemId] Erro:', error);
     return null;
   }
@@ -101,43 +101,97 @@ export async function getUserRewards() {
     .from('rewards')
     .select(`
       *,
-      items (id, title, status),
-      reward_claims (id, status, claimer_id, created_at, message)
+      items:item_id (
+        id,
+        title,
+        category
+      )
     `)
     .eq('owner_id', user.id)
     .order('created_at', { ascending: false });
 
   if (error) {
-    throw new Error(error.message || 'Erro ao listar recompensas');
+    console.error('[getUserRewards] Erro:', error);
+    throw new Error(error.message || 'Erro ao buscar recompensas');
   }
 
   return data || [];
 }
 
 /**
- * Deletar uma recompensa
- * @param {string} rewardId - ID da recompensa
- * @returns {Object} Recompensa deletada
+ * Listar recompensas reivindicadas pelo usuário
+ * @returns {Array} Lista de recompensas reivindicadas
  */
-export async function deleteReward(rewardId) {
+export async function getClaimedRewards() {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    throw new Error('Usuário não autenticado');
+  }
+
   const { data, error } = await supabase
     .from('rewards')
-    .delete()
+    .select(`
+      *,
+      items:item_id (
+        id,
+        title,
+        category
+      )
+    `)
+    .eq('claimed_by', user.id)
+    .order('claimed_at', { ascending: false });
+
+  if (error) {
+    console.error('[getClaimedRewards] Erro:', error);
+    throw new Error(error.message || 'Erro ao buscar recompensas reivindicadas');
+  }
+
+  return data || [];
+}
+
+/**
+ * Cancelar uma recompensa
+ * @param {string} rewardId - ID da recompensa
+ * @returns {Object} Recompensa cancelada
+ */
+export async function cancelReward(rewardId) {
+  const { data, error } = await supabase
+    .from('rewards')
+    .update({ status: 'cancelled' })
     .eq('id', rewardId)
     .select();
+
+  if (error) {
+    throw new Error(error.message || 'Erro ao cancelar recompensa');
+  }
+
+  return data[0];
+}
+
+/**
+ * Deletar uma recompensa
+ * @param {string} rewardId - ID da recompensa
+ * @returns {boolean} Sucesso
+ */
+export async function deleteReward(rewardId) {
+  const { error } = await supabase
+    .from('rewards')
+    .delete()
+    .eq('id', rewardId);
 
   if (error) {
     throw new Error(error.message || 'Erro ao deletar recompensa');
   }
 
-  return data;
+  return true;
 }
 
 /**
- * Criar reclamação de recompensa
+ * Criar uma reivindicação de recompensa
  * @param {string} rewardId - ID da recompensa
- * @param {Object} claimData - Dados da reclamação
- * @returns {Object} Reclamação criada
+ * @param {Object} claimData - Dados da reivindicação
+ * @returns {Object} Reivindicação criada
  */
 export async function createRewardClaim(rewardId, claimData) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -148,18 +202,6 @@ export async function createRewardClaim(rewardId, claimData) {
 
   const { message = '', evidenceNotes = '' } = claimData;
 
-  // Verificar se já existe reclamação ativa
-  const { data: existingClaims } = await supabase
-    .from('reward_claims')
-    .select('id')
-    .eq('reward_id', rewardId)
-    .eq('claimer_id', user.id)
-    .eq('status', 'pending');
-
-  if (existingClaims && existingClaims.length > 0) {
-    throw new Error('Você já tem uma reclamação pendente para esta recompensa');
-  }
-
   const claimPayload = {
     reward_id: rewardId,
     claimer_id: user.id,
@@ -168,7 +210,7 @@ export async function createRewardClaim(rewardId, claimData) {
     status: 'pending',
   };
 
-  console.log('[createRewardClaim] Criando reclamação:', claimPayload);
+  console.log('[createRewardClaim] Criando reivindicação:', claimPayload);
 
   const { data, error } = await supabase
     .from('reward_claims')
@@ -177,18 +219,48 @@ export async function createRewardClaim(rewardId, claimData) {
 
   if (error) {
     console.error('[createRewardClaim] Erro:', error);
-    throw new Error(error.message || 'Erro ao criar reclamação');
+    throw new Error(error.message || 'Erro ao criar reivindicação');
   }
 
-  console.log('[createRewardClaim] Reclamação criada com sucesso:', data[0]);
+  console.log('[createRewardClaim] Reivindicação criada:', data[0]);
   return data[0];
 }
 
 /**
- * Listar reclamações de recompensas do usuário
- * @returns {Array} Lista de reclamações
+ * Obter reivindicações de uma recompensa
+ * @param {string} rewardId - ID da recompensa
+ * @returns {Array} Lista de reivindicações
  */
-export async function getUserRewardClaims() {
+export async function getRewardClaimsForReward(rewardId) {
+  const { data, error } = await supabase
+    .from('reward_claims')
+    .select(`
+      *,
+      claimer:claimer_id (
+        id,
+        email,
+        profiles:profiles!inner (
+          name,
+          phone
+        )
+      )
+    `)
+    .eq('reward_id', rewardId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[getRewardClaimsForReward] Erro:', error);
+    throw new Error(error.message || 'Erro ao buscar reivindicações');
+  }
+
+  return data || [];
+}
+
+/**
+ * Obter reivindicações do usuário
+ * @returns {Array} Lista de reivindicações
+ */
+export async function getUserClaims() {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
   if (userError || !user) {
@@ -199,44 +271,33 @@ export async function getUserRewardClaims() {
     .from('reward_claims')
     .select(`
       *,
-      rewards (id, amount, currency, item_id, items (id, title))
+      reward:reward_id (
+        id,
+        amount,
+        currency,
+        description,
+        item:item_id (
+          id,
+          title,
+          category
+        )
+      )
     `)
     .eq('claimer_id', user.id)
     .order('created_at', { ascending: false });
 
   if (error) {
-    throw new Error(error.message || 'Erro ao listar reclamações');
+    console.error('[getUserClaims] Erro:', error);
+    throw new Error(error.message || 'Erro ao buscar reivindicações');
   }
 
   return data || [];
 }
 
 /**
- * Listar reclamações para uma recompensa (para o proprietário do item)
- * @param {string} rewardId - ID da recompensa
- * @returns {Array} Lista de reclamações
- */
-export async function getRewardClaimsForReward(rewardId) {
-  const { data, error } = await supabase
-    .from('reward_claims')
-    .select(`
-      *,
-      claimer:claimer_id (id, email, user_metadata)
-    `)
-    .eq('reward_id', rewardId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    throw new Error(error.message || 'Erro ao listar reclamações');
-  }
-
-  return data || [];
-}
-
-/**
- * Aprovar reclamação de recompensa
- * @param {string} claimId - ID da reclamação
- * @returns {Object} Reclamação atualizada
+ * Aprovar uma reivindicação de recompensa
+ * @param {string} claimId - ID da reivindicação
+ * @returns {Object} Reivindicação aprovada
  */
 export async function approveRewardClaim(claimId) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -245,34 +306,8 @@ export async function approveRewardClaim(claimId) {
     throw new Error('Usuário não autenticado');
   }
 
-  // Buscar a reclamação e recompensa associada
+  // Atualizar a reivindicação
   const { data: claim, error: claimError } = await supabase
-    .from('reward_claims')
-    .select('reward_id')
-    .eq('id', claimId)
-    .single();
-
-  if (claimError) {
-    throw new Error('Reclamação não encontrada');
-  }
-
-  // Verificar se o usuário é o proprietário da recompensa
-  const { data: reward, error: rewardError } = await supabase
-    .from('rewards')
-    .select('owner_id, claimed_by')
-    .eq('id', claim.reward_id)
-    .single();
-
-  if (rewardError || reward.owner_id !== user.id) {
-    throw new Error('Não autorizado para aprovar esta reclamação');
-  }
-
-  if (reward.claimed_by && reward.claimed_by !== claim.claimer_id) {
-    throw new Error('Esta recompensa já foi reivindicada por outro usuário');
-  }
-
-  // Atualizar reclamação e recompensa em transação
-  const { data: updatedClaim, error: updateError } = await supabase
     .from('reward_claims')
     .update({
       status: 'approved',
@@ -280,141 +315,73 @@ export async function approveRewardClaim(claimId) {
       reviewed_by: user.id,
     })
     .eq('id', claimId)
-    .select();
+    .select()
+    .single();
 
-  if (updateError) {
-    throw new Error(updateError.message || 'Erro ao aprovar reclamação');
+  if (claimError) {
+    throw new Error(claimError.message || 'Erro ao aprovar reivindicação');
   }
 
-  // Atualizar recompensa como reclamada
-  await updateReward(claim.reward_id, {
-    status: 'claimed',
-    claimed_at: new Date().toISOString(),
-    claimed_by: updatedClaim[0].claimer_id,
-  });
+  // Atualizar a recompensa para 'claimed'
+  const { error: rewardError } = await supabase
+    .from('rewards')
+    .update({
+      status: 'claimed',
+      claimed_at: new Date().toISOString(),
+      claimed_by: claim.claimer_id,
+    })
+    .eq('id', claim.reward_id);
 
-  return updatedClaim[0];
+  if (rewardError) {
+    throw new Error(rewardError.message || 'Erro ao atualizar recompensa');
+  }
+
+  return claim;
 }
 
 /**
- * Rejeitar reclamação de recompensa
- * @param {string} claimId - ID da reclamação
- * @param {string} reason - Motivo da rejeição (opcional)
- * @returns {Object} Reclamação atualizada
+ * Rejeitar uma reivindicação de recompensa
+ * @param {string} claimId - ID da reivindicação
+ * @returns {Object} Reivindicação rejeitada
  */
-export async function rejectRewardClaim(claimId, reason = '') {
+export async function rejectRewardClaim(claimId) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
   if (userError || !user) {
     throw new Error('Usuário não autenticado');
   }
 
-  // Buscar a reclamação
-  const { data: claim, error: claimError } = await supabase
-    .from('reward_claims')
-    .select('reward_id')
-    .eq('id', claimId)
-    .single();
-
-  if (claimError) {
-    throw new Error('Reclamação não encontrada');
-  }
-
-  // Verificar permissão
-  const { data: reward, error: rewardError } = await supabase
-    .from('rewards')
-    .select('owner_id')
-    .eq('id', claim.reward_id)
-    .single();
-
-  if (rewardError || reward.owner_id !== user.id) {
-    throw new Error('Não autorizado para rejeitar esta reclamação');
-  }
-
-  const { data: updatedClaim, error: updateError } = await supabase
+  const { data, error } = await supabase
     .from('reward_claims')
     .update({
       status: 'rejected',
-      evidence_notes: reason,
       reviewed_at: new Date().toISOString(),
       reviewed_by: user.id,
     })
     .eq('id', claimId)
     .select();
 
-  if (updateError) {
-    throw new Error(updateError.message || 'Erro ao rejeitar reclamação');
+  if (error) {
+    throw new Error(error.message || 'Erro ao rejeitar reivindicação');
   }
 
-  return updatedClaim[0];
+  return data[0];
 }
 
 /**
- * Cancelar recompensa
- * @param {string} rewardId - ID da recompensa
- * @returns {Object} Recompensa atualizada
+ * Deletar uma reivindicação
+ * @param {string} claimId - ID da reivindicação
+ * @returns {boolean} Sucesso
  */
-export async function cancelReward(rewardId) {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  
-  if (userError || !user) {
-    throw new Error('Usuário não autenticado');
-  }
-
-  // Verificar se o usuário é o proprietário
-  const { data: reward, error: rewardError } = await supabase
-    .from('rewards')
-    .select('owner_id, status')
-    .eq('id', rewardId)
-    .single();
-
-  if (rewardError || reward.owner_id !== user.id) {
-    throw new Error('Não autorizado para cancelar esta recompensa');
-  }
-
-  if (reward.status === 'claimed') {
-    throw new Error('Não é possível cancelar uma recompensa já reivindicada');
-  }
-
-  return updateReward(rewardId, { status: 'cancelled' });
-}
-
-/**
- * Obter estatísticas de recompensas do usuário
- * @returns {Object} Estatísticas
- */
-export async function getUserRewardStats() {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  
-  if (userError || !user) {
-    throw new Error('Usuário não autenticado');
-  }
-
-  const { data: rewards, error } = await supabase
-    .from('rewards')
-    .select('status, amount')
-    .eq('owner_id', user.id);
+export async function deleteRewardClaim(claimId) {
+  const { error } = await supabase
+    .from('reward_claims')
+    .delete()
+    .eq('id', claimId);
 
   if (error) {
-    throw new Error('Erro ao buscar estatísticas');
+    throw new Error(error.message || 'Erro ao deletar reivindicação');
   }
 
-  const stats = {
-    totalActive: 0,
-    totalClaimed: 0,
-    totalAmount: 0,
-    claimedAmount: 0,
-  };
-
-  rewards?.forEach(reward => {
-    if (reward.status === 'active') {
-      stats.totalActive++;
-      stats.totalAmount += reward.amount;
-    } else if (reward.status === 'claimed') {
-      stats.totalClaimed++;
-      stats.claimedAmount += reward.amount;
-    }
-  });
-
-  return stats;
+  return true;
 }

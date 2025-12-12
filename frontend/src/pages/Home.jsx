@@ -27,6 +27,7 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const [mineOnly, setMineOnly] = useState(false);
   const [ownerSocialMedia, setOwnerSocialMedia] = useState({});
+  const [ownerProfiles, setOwnerProfiles] = useState({});
   const [expandedCards, setExpandedCards] = useState({});
   const [selectedItem, setSelectedItem] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -69,11 +70,6 @@ export default function Home() {
     const filtered = items.filter(it => {
       // filtro "meus itens"
       if (mineOnly && user && String(it.owner_id) !== String(user.id)) return false;
-      // status
-      if (statusFilter !== 'all') {
-        if (statusFilter === 'lost' && it.status === 'found') return false;
-        if (statusFilter === 'found' && it.status !== 'found') return false;
-      }
       // categoria
       if (categoryFilter !== 'all' && (it.category || '') !== categoryFilter) return false;
       // busca por texto em título, descrição e endereço
@@ -84,7 +80,7 @@ export default function Home() {
       return true;
     });
     setFilteredItems(filtered);
-  }, [items, search, statusFilter, categoryFilter, mineOnly, user]);
+  }, [items, search, categoryFilter, mineOnly, user]);
 
   // Quando os items forem carregados, busque as fotos (primeira foto) para mostrar nos cards
   useEffect(() => {
@@ -142,8 +138,8 @@ export default function Home() {
   }
 
   // Buscar redes sociais do proprietário do item
-  async function loadOwnerSocialMedia(userId) {
-    if (ownerSocialMedia[userId]) return; // já foi carregado
+  async function loadOwnerSocialMedia(userId, forceReload = false) {
+    if (ownerSocialMedia[userId] && !forceReload) return; // já foi carregado
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -158,6 +154,40 @@ export default function Home() {
       console.debug('Erro ao buscar redes sociais do proprietário:', err);
     }
   }
+
+  // Buscar perfil do proprietário (nome e avatar)
+  async function loadOwnerProfile(userId) {
+    if (ownerProfiles[userId]) return; // já foi carregado
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, avatar_url')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.debug('Erro ao buscar perfil:', error.message);
+        return;
+      }
+      
+      if (data) {
+        setOwnerProfiles(prev => ({ ...prev, [userId]: data }));
+      }
+    } catch (err) {
+      console.debug('Erro ao buscar perfil do proprietário:', err);
+    }
+  }
+
+  // Carregar perfis dos proprietários dos itens
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    // Desabilitado temporariamente para evitar erro 406 de RLS
+    // items.forEach(item => {
+    //   if (item.owner_id) {
+    //     loadOwnerProfile(item.owner_id);
+    //   }
+    // });
+  }, [items]);
 
   async function sendContact() {
     if (!contactModal.item) return;
@@ -234,6 +264,10 @@ export default function Home() {
                     ) : (
                       <div className="h-full w-full bg-surface-dark flex items-center justify-center text-text-secondary-dark">Sem foto</div>
                     )}
+                    {/* Botão de compartilhar no canto superior direito */}
+                    <div className="absolute top-2 right-2">
+                      <ShareButton item={item} />
+                    </div>
                   </div>
 
                   {/* Content */}
@@ -244,8 +278,8 @@ export default function Home() {
                           {item.category || 'Outros'}
                         </span>
                       </div>
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${item.status === 'found' ? 'bg-found-blue text-white' : 'bg-lost-yellow text-background-dark'}`}>
-                        {item.status === 'found' ? 'ACHADO' : 'PERDIDO'}
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold bg-lost-yellow text-background-dark`}>
+                        PERDIDO
                       </span>
                     </div>
                     
@@ -287,15 +321,18 @@ export default function Home() {
             <div className={`mb-6 pb-4 border-b-2 ${darkMode ? 'border-gray-700' : 'border-neutral-light'}`}>
               <div className="flex items-center justify-between mb-2">
                 <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-primary'}`}>{selectedItem.title || selectedItem.name}</h2>
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  className="text-2xl hover:text-red-500 transition"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  <ShareButton item={selectedItem} />
+                  <button
+                    onClick={() => setSelectedItem(null)}
+                    className="text-2xl hover:text-red-500 transition"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <div className={`text-sm font-semibold ${selectedItem.status === 'found' ? 'text-green-600' : 'text-yellow-600'}`}>
-                {selectedItem.status === 'found' ? '✅ Encontrado' : '🔍 Perdido'}
+              <div className={`text-sm font-semibold text-yellow-600`}>
+                🔍 Perdido
               </div>
             </div>
 
@@ -308,6 +345,42 @@ export default function Home() {
 
             {/* Conteúdo */}
             <div className="space-y-4 mb-6">
+              {/* Perfil do Proprietário */}
+              {selectedItem.owner_id && (
+                <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/30 rounded-xl p-4">
+                  <h3 className="font-semibold text-primary mb-3 flex items-center gap-2">
+                    <span>👤</span>
+                    <span>Proprietário</span>
+                  </h3>
+                  {ownerProfiles[selectedItem.owner_id] ? (
+                    <div className="flex items-center gap-3">
+                      {ownerProfiles[selectedItem.owner_id].avatar_url ? (
+                        <img 
+                          src={ownerProfiles[selectedItem.owner_id].avatar_url} 
+                          alt={ownerProfiles[selectedItem.owner_id].name}
+                          className="w-12 h-12 rounded-full object-cover border-2 border-primary"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xl font-bold border-2 border-primary">
+                          {ownerProfiles[selectedItem.owner_id].name?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-white">{ownerProfiles[selectedItem.owner_id].name}</p>
+                        <p className="text-xs text-gray-400">Registrou este item</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => loadOwnerProfile(selectedItem.owner_id)}
+                      className="text-sm text-primary hover:text-primary/80 transition"
+                    >
+                      Carregando informações do proprietário...
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div>
                 <h3 className="font-semibold text-neutral-dark mb-1">Descrição</h3>
                 <p className="text-neutral-dark whitespace-pre-wrap">{selectedItem.description || 'Sem descrição'}</p>
@@ -416,7 +489,7 @@ export default function Home() {
               <div className="flex gap-2 flex-wrap border-t pt-4">
                 <button
                   onClick={() => {
-                    loadOwnerSocialMedia(selectedItem.owner_id);
+                    loadOwnerSocialMedia(selectedItem.owner_id, true);
                     setContactModal({ open: true, item: selectedItem, message: '', sending: false, error: '' });
                   }}
                   className="inline-flex items-center gap-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium text-sm transition shadow-md hover:shadow-lg"
@@ -424,45 +497,6 @@ export default function Home() {
                   <span>💬</span>
                   <span>Contato</span>
                 </button>
-                {selectedItem.status !== 'found' && (
-                  <button
-                    onClick={async () => {
-                      // Verificar se há recompensa antes de marcar como encontrado
-                      try {
-                        const reward = await getRewardByItemId(selectedItem.id);
-                        
-                        if (reward) {
-                          // Se há recompensa, abrir modal para reclamar
-                          setRewardClaimModal({ open: true, reward });
-                        } else {
-                          // Sem recompensa, apenas marcar como encontrado
-                          if (confirm('Você encontrou este item? O proprietário será notificado por email.')) {
-                            const { error } = await supabase
-                              .from('items')
-                              .update({ status: 'found' })
-                              .eq('id', selectedItem.id);
-                            
-                            if (error) throw error;
-                            
-                            alert('✅ Item marcado como encontrado! O proprietário receberá um email.');
-                            setSelectedItem(null);
-                            const { data } = await supabase
-                              .from('items')
-                              .select('*')
-                              .order('created_at', { ascending: false });
-                            setItems(data || []);
-                          }
-                        }
-                      } catch (err) {
-                        alert('Erro: ' + err.message);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition shadow-md hover:shadow-lg"
-                  >
-                    <span>✅</span>
-                    <span>Encontrei este Item</span>
-                  </button>
-                )}
               </div>
             )}
 
@@ -484,20 +518,20 @@ export default function Home() {
       {/* Contact modal */}
       {contactModal.open && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-screen overflow-y-auto">
+          <div className="bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-2xl w-full max-h-screen overflow-y-auto border border-gray-700">
             {/* Header */}
-            <div className="mb-6 pb-4 border-b-2 border-neutral-light">
+            <div className="mb-6 pb-4 border-b-2 border-gray-700">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-2xl font-bold text-primary">Contato com o Proprietário</h3>
                 <button
                   onClick={() => setContactModal({ open: false, item: null, message: '', sending: false, error: '' })}
-                  className="text-2xl hover:text-red-500 transition"
+                  className="text-2xl text-gray-400 hover:text-red-500 transition"
                 >
                   ✕
                 </button>
               </div>
-              <div className="text-sm text-neutral-dark">
-                <span className="inline-block bg-accent/10 text-accent px-3 py-1 rounded-full">
+              <div className="text-sm text-gray-300">
+                <span className="inline-block bg-accent/20 text-accent px-3 py-1 rounded-full">
                   📦 {contactModal.item?.title || contactModal.item?.name}
                 </span>
               </div>
@@ -505,7 +539,7 @@ export default function Home() {
 
             {/* Redes Sociais do Proprietário */}
             {ownerSocialMedia[contactModal.item?.owner_id] && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border-2 border-primary/20">
+              <div className="mb-6 p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl border-2 border-primary/30">
                 <div className="text-sm font-bold text-primary mb-3 flex items-center gap-2">
                   <span>📱</span>
                   <span>Formas de Contato Direto</span>
@@ -587,9 +621,9 @@ export default function Home() {
 
             {/* Separador */}
             <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-neutral-light"></div>
-              <span className="text-xs text-neutral-light font-semibold">OU</span>
-              <div className="flex-1 h-px bg-neutral-light"></div>
+              <div className="flex-1 h-px bg-gray-700"></div>
+              <span className="text-xs text-gray-400 font-semibold">OU</span>
+              <div className="flex-1 h-px bg-gray-700"></div>
             </div>
 
             {/* Chat do Sistema */}
@@ -602,15 +636,15 @@ export default function Home() {
                 onChange={e => setContactModal(prev => ({ ...prev, message: e.target.value }))}
                 placeholder="Escreva sua mensagem aqui... (máximo 500 caracteres)"
                 maxLength="500"
-                className="w-full h-32 border-2 border-neutral-light p-3 rounded-lg focus:border-primary focus:outline-none resize-none text-sm"
+                className="w-full h-32 bg-gray-800 border-2 border-gray-700 text-gray-100 placeholder-gray-500 p-3 rounded-lg focus:border-primary focus:outline-none resize-none text-sm"
               />
-              <div className="text-xs text-neutral-light text-right mt-1">
+              <div className="text-xs text-gray-400 text-right mt-1">
                 {contactModal.message.length}/500 caracteres
               </div>
             </div>
 
             {contactModal.error && (
-              <div className="mb-4 p-3 bg-red-50 border-2 border-red-200 rounded-lg text-red-700 text-sm font-semibold flex items-center gap-2">
+              <div className="mb-4 p-3 bg-red-900/30 border-2 border-red-700 rounded-lg text-red-300 text-sm font-semibold flex items-center gap-2">
                 <span>❌</span>
                 {contactModal.error}
               </div>
@@ -620,7 +654,7 @@ export default function Home() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setContactModal({ open: false, item: null, message: '', sending: false, error: '' })}
-                className="px-6 py-3 rounded-lg border-2 border-neutral-light hover:bg-neutral-light text-neutral-dark font-semibold transition"
+                className="px-6 py-3 rounded-lg border-2 border-gray-700 hover:bg-gray-800 text-gray-300 font-semibold transition"
               >
                 Cancelar
               </button>

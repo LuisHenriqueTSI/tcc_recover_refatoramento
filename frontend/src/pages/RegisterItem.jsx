@@ -1,5 +1,6 @@
 import SimpleSidebar from '../components/SimpleSidebar';
-import { useState } from 'react';
+import ShareButton from '../components/ShareButton';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { registerItem, updateItem, analyzeImage, saveItemPhoto } from '../services/items';
 import { createReward } from '../services/rewards';
@@ -119,6 +120,7 @@ export default function RegisterItem() {
   const [category, setCategory] = useState(editingItem?.category || '');
 
   const [photos, setPhotos] = useState([]);
+  const [existingPhotos, setExistingPhotos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
@@ -131,6 +133,37 @@ export default function RegisterItem() {
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardDescription, setRewardDescription] = useState('');
   const [rewardDaysToExpire, setRewardDaysToExpire] = useState('30');
+
+  // Carregar fotos existentes quando editando
+  useEffect(() => {
+    if (editingItem && editingItem.id) {
+      const loadExistingPhotos = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('item_photos')
+            .select('*')
+            .eq('item_id', editingItem.id);
+          
+          if (!error && data) {
+            setExistingPhotos(data);
+          }
+        } catch (err) {
+          console.error('[RegisterItem] Erro ao carregar fotos:', err);
+        }
+      };
+      loadExistingPhotos();
+      
+      // Garantir que o itemType está setado
+      if (editingItem.item_type && !itemType) {
+        setItemType(editingItem.item_type);
+      }
+      
+      // Garantir que a categoria está setada
+      if (editingItem.category && !category) {
+        setCategory(editingItem.category);
+      }
+    }
+  }, [editingItem]);
 
   if (!user) {
     return (
@@ -145,6 +178,7 @@ export default function RegisterItem() {
 
   const handleTypeSelect = (type) => {
     setItemType(type);
+    setCategory(type);
     setCurrentStep(1);
   };
 
@@ -293,6 +327,33 @@ export default function RegisterItem() {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const removeExistingPhoto = async (photoId, photoUrl) => {
+    try {
+      // Extrair o caminho do arquivo da URL
+      const urlParts = photoUrl.split('/item-photos/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1];
+        
+        // Deletar do storage
+        await supabase.storage
+          .from('item-photos')
+          .remove([filePath]);
+      }
+      
+      // Deletar do banco de dados
+      await supabase
+        .from('item_photos')
+        .delete()
+        .eq('id', photoId);
+      
+      // Atualizar estado
+      setExistingPhotos(prev => prev.filter(p => p.id !== photoId));
+    } catch (err) {
+      console.error('[RegisterItem] Erro ao remover foto:', err);
+      setError('Erro ao remover foto: ' + err.message);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!itemType) {
@@ -337,6 +398,35 @@ export default function RegisterItem() {
       let createdItemData;
       if (editingItem) {
         await updateItem(editingItem.id, itemData);
+        
+        // Upload novas fotos se houver
+        if (photos && photos.length > 0) {
+          console.log('[RegisterItem] Fazendo upload de', photos.length, 'novas fotos');
+          for (const photo of photos) {
+            try {
+              const fileExt = photo.file.name.split('.').pop();
+              const fileName = `${editingItem.id}/${Date.now()}.${fileExt}`;
+              
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('item-photos')
+                .upload(fileName, photo.file);
+
+              if (uploadError) {
+                console.error('[RegisterItem] Erro ao fazer upload:', uploadError);
+                continue;
+              }
+
+              const { data: { publicUrl } } = supabase.storage
+                .from('item-photos')
+                .getPublicUrl(fileName);
+
+              await saveItemPhoto(editingItem.id, publicUrl);
+            } catch (err) {
+              console.error('[RegisterItem] Erro ao processar foto:', err);
+            }
+          }
+        }
+        
         setSuccess(true);
         setTimeout(() => navigate('/home'), 2000);
       } else {
@@ -485,6 +575,15 @@ export default function RegisterItem() {
                 </div>
               )}
 
+              {createdItem && !editingItem && (
+                <div className="mb-6">
+                  <p className="text-text-secondary-dark mb-4">Compartilhe em suas redes sociais para aumentar as chances de encontrar:</p>
+                  <div className="flex justify-center">
+                    <ShareButton item={createdItem} />
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-4 justify-center flex-wrap">
                 <button
                   onClick={() => navigate('/home')}
@@ -630,6 +729,32 @@ export default function RegisterItem() {
               <div className="bg-surface-dark rounded-xl p-8 border border-white/10 space-y-6">
                 <h2 className="text-2xl font-bold text-white">Fotos do Item</h2>
 
+                {/* Fotos Existentes */}
+                {existingPhotos.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Fotos Atuais</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6">
+                      {existingPhotos.map((photo) => (
+                        <div key={photo.id} className="relative group">
+                          <img
+                            src={photo.url}
+                            alt="Foto existente"
+                            className="aspect-square w-full rounded-lg object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeExistingPhoto(photo.id, photo.url)}
+                            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Remover foto"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-white/20 rounded-xl text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition">
                   <span className="material-symbols-outlined text-4xl text-text-secondary-dark">upload_file</span>
                   <p className="text-white mt-2">Arraste e solte as fotos aqui ou <span className="font-bold text-primary">clique para selecionar</span></p>
@@ -644,23 +769,26 @@ export default function RegisterItem() {
                 </label>
 
                 {photos.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {photos.map((photo, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={photo.preview}
-                          alt={`Foto ${index + 1}`}
-                          className="aspect-square w-full rounded-lg object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(index)}
-                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <span className="material-symbols-outlined text-sm">close</span>
-                        </button>
-                      </div>
-                    ))}
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Novas Fotos</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {photos.map((photo, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={photo.preview}
+                            alt={`Foto ${index + 1}`}
+                            className="aspect-square w-full rounded-lg object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(index)}
+                            className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -737,7 +865,6 @@ export default function RegisterItem() {
                   >
                     <option value="">Selecione uma opção</option>
                     <option value="lost">Perdido</option>
-                    <option value="found">Achado</option>
                   </select>
                 </div>
 

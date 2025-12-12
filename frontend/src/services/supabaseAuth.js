@@ -1,30 +1,60 @@
 import { supabase } from '../supabaseClient';
 
 export async function signUp(email, password, name) {
-  // Try to include user metadata on signup (SDK supports passing options/data in some versions)
-  let res;
+  console.log('[signUp] Iniciando registro com confirmação de email...');
+  
   try {
-    // Preferred: pass metadata in options (SDK may accept second param with data)
-    res = await supabase.auth.signUp({ email, password }, { data: { name } });
-  } catch (e) {
-    // Fallback: call signUp without metadata
-    res = await supabase.auth.signUp({ email, password });
-  }
+    // Configuração do signUp com confirmação de email obrigatória
+    const signUpOptions = {
+      email,
+      password,
+      options: {
+        data: {
+          name: name
+        },
+        emailRedirectTo: `${window.location.origin}/login`
+      }
+    };
 
-  // If user object is present (immediate sign-up), upsert a profile row
-  try {
-    const user = res?.data?.user || res?.user;
-    if (user && user.id) {
-      await supabase
-        .from('profiles')
-        .upsert({ id: user.id, name }, { onConflict: 'id' });
+    console.log('[signUp] Chamando supabase.auth.signUp...');
+    
+    // Remover timeout - deixar o Supabase processar quanto tempo precisar
+    const res = await supabase.auth.signUp(signUpOptions);
+    
+    console.log('[signUp] Resposta do Supabase:', res);
+
+    // Se houver erro, retornar
+    if (res?.error) {
+      console.error('[signUp] Erro no signup:', res.error);
+      return res;
     }
-  } catch (e) {
-    // Do not fail signup if profile insert fails; log to console
-    console.debug('Failed to upsert profile after signUp', e);
-  }
 
-  return res;
+    // Criar perfil na tabela profiles
+    const user = res?.data?.user;
+    if (user && user.id) {
+      console.log('[signUp] Criando perfil para usuário:', user.id);
+      try {
+        await supabase
+          .from('profiles')
+          .upsert({ 
+            id: user.id, 
+            name,
+            email: user.email,
+            email_confirmed: false,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        console.log('[signUp] Perfil criado com sucesso');
+      } catch (profileError) {
+        console.error('[signUp] Erro ao criar perfil:', profileError);
+        // Não falhar o signup se o perfil não for criado
+      }
+    }
+
+    return res;
+  } catch (error) {
+    console.error('[signUp] Exceção durante signup:', error);
+    return { error };
+  }
 }
 
 export async function signIn(email, password) {

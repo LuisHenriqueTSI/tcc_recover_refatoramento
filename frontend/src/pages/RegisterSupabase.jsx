@@ -10,47 +10,69 @@ export default function RegisterSupabase() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState('');
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
+
     if (!name || name.trim() === '') {
       setError('Por favor, informe seu nome');
       setLoading(false);
       return;
     }
-    const res = await signUp(email, password, name);
-    if (res?.error) {
-      setError(res.error.message || 'Erro ao registrar');
-      setLoading(false);
-      return;
-    }
 
-    // Try to sign in immediately and create profile in Supabase
+    console.log('[RegisterSupabase] Iniciando registro para:', email);
+
     try {
-      const signin = await signIn(email, password);
-      const user = signin?.data?.user;
+      const res = await signUp(email, password, name);
       
-      if (user) {
-        // Create profile in Supabase
-        await supabase
-          .from('profiles')
-          .upsert({
-            id: user.id,
-            name: name,
-            email: user.email,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'id' });
+      if (res?.error) {
+        console.error('[RegisterSupabase] Erro no signup:', res.error);
+        setError(res.error.message || 'Erro ao registrar');
+        setLoading(false);
+        return;
       }
-    } catch (e) {
-      // ignore profile creation errors, user can complete profile later
-      console.debug('profile creation failed', e);
-    }
 
-    navigate('/login');
-    setLoading(false);
+      console.log('[RegisterSupabase] Registro bem-sucedido:', res);
+
+      // Verificar se precisa confirmar email
+      const needsEmailConfirmation = res?.data?.user && !res?.data?.session;
+
+      if (needsEmailConfirmation) {
+        // Usuário precisa confirmar email
+        setSuccess('Conta criada com sucesso! Verifique seu email para confirmar sua conta.');
+        setLoading(false);
+
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              message: 'Verifique seu email para confirmar sua conta antes de fazer login.' 
+            } 
+          });
+        }, 3000);
+      } else {
+        // Conta criada e já pode fazer login
+        setSuccess('Conta criada com sucesso! Redirecionando...');
+        setLoading(false);
+
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              message: 'Conta criada com sucesso! Faça login para continuar.' 
+            } 
+          });
+        }, 2000);
+      }
+
+    } catch (error) {
+      console.error('[RegisterSupabase] Exceção durante registro:', error);
+      setError(error.message || 'Erro ao registrar. Tente novamente.');
+      setLoading(false);
+    }
   }
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -101,7 +123,7 @@ export default function RegisterSupabase() {
               disabled={loading}
               className="flex-1 px-6 py-3 rounded-lg bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white font-semibold transition-colors"
             >
-              {loading ? '⏳ Registrando...' : '✅ Registrar'}
+              {loading ? '📧 Enviando email de confirmação...' : '✅ Registrar'}
             </button>
             <button 
               type="button"
@@ -112,6 +134,12 @@ export default function RegisterSupabase() {
             </button>
           </div>
         </form>
+        {success && (
+          <div className="mt-4 text-green-200 text-sm text-center bg-green-500/20 border border-green-500/50 rounded-lg p-4 font-semibold">
+            ✅ {success}
+            <div className="text-xs font-normal mt-2">Redirecionando para login...</div>
+          </div>
+        )}
         {error && <div className="mt-4 text-red-400 text-sm text-center bg-red-500/20 border border-red-500/50 rounded-lg p-3 font-semibold">{error}</div>}
         <div className="mt-6 text-center text-text-secondary-dark text-sm">
           Já tem conta? <button onClick={() => navigate('/login')} className="text-primary hover:text-primary/80 font-semibold transition">Entrar</button>

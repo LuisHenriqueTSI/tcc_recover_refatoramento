@@ -96,45 +96,45 @@ export default function ShareButton({ item }) {
           {/* Menu com position absolute relativo ao container */}
           <div
             ref={menuRef}
-            className="absolute top-full mt-2 right-0 z-50 bg-white border-2 border-primary rounded-xl shadow-2xl p-3 min-w-max"
+            className="absolute top-full mt-2 right-0 z-50 bg-gray-900 border-2 border-gray-700 rounded-xl shadow-2xl p-2 min-w-max"
           >
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-1 items-center">
               <button
                 onClick={() => openShare('whatsapp')}
-                className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-green-50 rounded-lg transition group"
+                className="flex flex-col items-center gap-0.5 px-2 py-1.5 hover:bg-green-600/20 rounded-lg transition group"
                 title="Compartilhar no WhatsApp"
               >
-                <span className="text-3xl">💬</span>
-                <span className="text-xs font-semibold text-neutral-dark group-hover:text-green-700">WhatsApp</span>
+                <span className="text-xl">💬</span>
+                <span className="text-[10px] font-semibold text-gray-300 group-hover:text-green-400">WhatsApp</span>
               </button>
 
               <button
                 onClick={() => openShare('instagram')}
-                className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-pink-50 rounded-lg transition group"
+                className="flex flex-col items-center gap-0.5 px-2 py-1.5 hover:bg-pink-600/20 rounded-lg transition group"
                 title="Compartilhar no Instagram"
               >
-                <span className="text-3xl">📷</span>
-                <span className="text-xs font-semibold text-neutral-dark group-hover:text-pink-700">Instagram</span>
+                <span className="text-xl">📷</span>
+                <span className="text-[10px] font-semibold text-gray-300 group-hover:text-pink-400">Instagram</span>
               </button>
 
               <button
                 onClick={() => openShare('facebook')}
-                className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-blue-50 rounded-lg transition group"
+                className="flex flex-col items-center gap-0.5 px-2 py-1.5 hover:bg-blue-600/20 rounded-lg transition group"
                 title="Compartilhar no Facebook"
               >
-                <span className="text-3xl">👍</span>
-                <span className="text-xs font-semibold text-neutral-dark group-hover:text-blue-700">Facebook</span>
+                <span className="text-xl">👍</span>
+                <span className="text-[10px] font-semibold text-gray-300 group-hover:text-blue-400">Facebook</span>
               </button>
 
-              <div className="w-px h-12 bg-neutral-light mx-1" />
+              <div className="w-px h-8 bg-gray-700 mx-0.5" />
 
               <button
                 onClick={handleCopyLink}
-                className="flex flex-col items-center gap-1 px-4 py-2 hover:bg-gray-50 rounded-lg transition group"
+                className="flex flex-col items-center gap-0.5 px-2 py-1.5 hover:bg-gray-600/20 rounded-lg transition group"
                 title="Copiar para clipboard"
               >
-                <span className="text-3xl">📋</span>
-                <span className="text-xs font-semibold text-neutral-dark group-hover:text-gray-700">
+                <span className="text-xl">📋</span>
+                <span className="text-[10px] font-semibold text-gray-300 group-hover:text-gray-100">
                   {copied ? '✅' : 'Copiar'}
                 </span>
               </button>

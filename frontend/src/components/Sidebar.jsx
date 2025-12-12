@@ -198,7 +198,6 @@ export default function Sidebar({
           >
             <option value="all">Todos</option>
             <option value="lost">Perdido</option>
-            <option value="found">Achado</option>
           </select>
         </div>
 

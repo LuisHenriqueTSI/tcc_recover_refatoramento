@@ -1,4 +1,4 @@
-import supabase from '../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 /**
  * Criar um novo avistamento
@@ -75,8 +75,7 @@ export async function getSightings(itemId) {
         photo_url,
         contact_info,
         created_at,
-        user_id,
-        profiles (name, avatar_url)
+        user_id
       `)
       .eq('item_id', itemId)
       .order('created_at', { ascending: false });
@@ -84,6 +83,27 @@ export async function getSightings(itemId) {
     if (error) {
       console.error('Erro ao obter avistamentos:', error);
       throw error;
+    }
+
+    // Buscar dados dos usuários manualmente
+    if (data && data.length > 0) {
+      const userIds = [...new Set(data.map(s => s.user_id))];
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_url')
+        .in('id', userIds);
+
+      if (!profileError && profiles) {
+        const profileMap = {};
+        profiles.forEach(p => {
+          profileMap[p.id] = p;
+        });
+
+        // Adicionar dados do perfil a cada avistamento
+        data.forEach(sighting => {
+          sighting.profiles = profileMap[sighting.user_id] || {};
+        });
+      }
     }
 
     return { success: true, data: data || [] };

@@ -1,7 +1,7 @@
 -- Criar tabela de avistamentos
 CREATE TABLE sightings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  item_id BIGINT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   location TEXT NOT NULL,
   description TEXT,
@@ -37,13 +37,13 @@ CREATE POLICY "Usuários podem deletar seus próprios avistamentos" ON sightings
   TO authenticated
   USING (auth.uid() = user_id);
 
--- Policy: Proprietários do item podem deletar avistamentos
+-- Policy: Proprietários do item podem deletar avistamentos do seu item (versão simplificada)
 CREATE POLICY "Proprietários podem deletar avistamentos do seu item" ON sightings
   FOR DELETE
   TO authenticated
   USING (
-    item_id IN (
-      SELECT id FROM items WHERE owner_id = auth.uid()
+    EXISTS (
+      SELECT 1 FROM items WHERE items.id = sightings.item_id AND items.owner_id::uuid = auth.uid()
     )
   );
 

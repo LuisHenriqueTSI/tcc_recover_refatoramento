@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { createSighting } from '../services/sightings';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SightingModal({ isOpen, onClose, itemId, itemName, itemType, onSuccess }) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     location: '',
     description: '',
@@ -68,11 +70,9 @@ export default function SightingModal({ isOpen, onClose, itemId, itemName, itemT
 
     setLoading(true);
     try {
-      const userId = (await import('../supabaseClient')).default.auth.user()?.id;
-
       const result = await createSighting({
         itemId,
-        userId,
+        userId: user?.id,
         location: formData.location,
         description: formData.description,
         contactInfo: formData.contactInfo,

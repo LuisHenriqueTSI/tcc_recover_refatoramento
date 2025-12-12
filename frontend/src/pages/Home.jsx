@@ -2,10 +2,13 @@ import Sidebar from '../components/Sidebar'
 import ShareButton from '../components/ShareButton'
 import RewardBadge from '../components/RewardBadge'
 import RewardClaimModal from '../components/RewardClaimModal'
+import SightingModal from '../components/SightingModal'
+import SightingsList from '../components/SightingsList'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react';
 import { deleteItem } from '../services/items';
 import { getRewardByItemId } from '../services/rewards';
+import { getSightings, deleteSighting } from '../services/sightings';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../supabaseClient';
@@ -32,6 +35,9 @@ export default function Home() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rewardClaimModal, setRewardClaimModal] = useState({ open: false, reward: null });
+  const [sightingModal, setSightingModal] = useState({ open: false, item: null });
+  const [sightings, setSightings] = useState([]);
+  const [loadingSightings, setLoadingSightings] = useState(false);
 
   useEffect(() => {
     async function fetchItems() {
@@ -188,6 +194,48 @@ export default function Home() {
     //   }
     // });
   }, [items]);
+
+  // Carregar avistamentos de um item
+  async function loadSightings(itemId) {
+    setLoadingSightings(true);
+    try {
+      const result = await getSightings(itemId);
+      if (result.success) {
+        setSightings(result.data);
+      } else {
+        console.error('Erro ao carregar avistamentos:', result.error);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar avistamentos:', err);
+    } finally {
+      setLoadingSightings(false);
+    }
+  }
+
+  // Deletar um avistamento
+  async function handleDeleteSighting(sightingId) {
+    if (!confirm('Tem certeza que deseja deletar este avistamento?')) return;
+
+    try {
+      const result = await deleteSighting(sightingId);
+      if (result.success) {
+        setSightings(prev => prev.filter(s => s.id !== sightingId));
+        alert('✅ Avistamento deletado com sucesso');
+      } else {
+        alert('Erro ao deletar avistamento');
+      }
+    } catch (err) {
+      console.error('Erro ao deletar avistamento:', err);
+      alert('Erro ao deletar avistamento');
+    }
+  }
+
+  // Quando um item é selecionado, carregar seus avistamentos
+  useEffect(() => {
+    if (selectedItem) {
+      loadSightings(selectedItem.id);
+    }
+  }, [selectedItem]);
 
   async function sendContact() {
     if (!contactModal.item) return;
@@ -457,6 +505,29 @@ export default function Home() {
               ) : null}
             </div>
 
+            {/* Avistamentos */}
+            <div className="border-t pt-6 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span>👁️</span>
+                  <span>Avistamentos ({sightings.length})</span>
+                </h3>
+              </div>
+              
+              {loadingSightings ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto"></div>
+                </div>
+              ) : (
+                <SightingsList 
+                  sightings={sightings} 
+                  itemOwnerId={selectedItem.owner_id}
+                  currentUserId={user?.id}
+                  onDelete={handleDeleteSighting}
+                />
+              )}
+            </div>
+
             {/* Ações */}
             {user && String(user.id) === String(selectedItem.owner_id) && (
               <div className="flex gap-2 flex-wrap border-t pt-4">
@@ -497,6 +568,13 @@ export default function Home() {
                   <span>💬</span>
                   <span>Contato</span>
                 </button>
+                <button
+                  onClick={() => setSightingModal({ open: true, item: selectedItem })}
+                  className="inline-flex items-center gap-1 px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg font-medium text-sm transition shadow-md hover:shadow-lg"
+                >
+                  <span>👁️</span>
+                  <span>Reportar Avista</span>
+                </button>
               </div>
             )}
 
@@ -508,6 +586,13 @@ export default function Home() {
                 >
                   <span>💬</span>
                   <span>Entrar para Contatar</span>
+                </button>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="inline-flex items-center gap-1 px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg font-medium text-sm transition shadow-md hover:shadow-lg"
+                >
+                  <span>👁️</span>
+                  <span>Entrar para Reportar Avista</span>
                 </button>
               </div>
             )}
@@ -684,6 +769,19 @@ export default function Home() {
             .select('*')
             .order('created_at', { ascending: false })
             .then(({ data }) => setItems(data || []));
+        }}
+      />
+
+      {/* Sighting Modal */}
+      <SightingModal 
+        isOpen={sightingModal.open}
+        onClose={() => setSightingModal({ open: false, item: null })}
+        itemId={sightingModal.item?.id}
+        itemName={sightingModal.item?.title || sightingModal.item?.name}
+        itemType={sightingModal.item?.item_type}
+        onSuccess={() => {
+          alert('✅ Avistamento reportado com sucesso! O proprietário será notificado.');
+          loadSightings(selectedItem.id);
         }}
       />
     </div>

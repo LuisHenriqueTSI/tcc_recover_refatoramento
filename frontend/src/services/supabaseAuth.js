@@ -25,7 +25,12 @@ export async function signUp(email, password, name) {
 
     // Se houver erro, retornar
     if (res?.error) {
-      console.error('[signUp] Erro no signup:', res.error);
+      console.error('[signUp] Erro no signup:', {
+        message: res.error?.message,
+        status: res.error?.status,
+        name: res.error?.name,
+        cause: res.error?.cause
+      });
       return res;
     }
 
@@ -52,7 +57,11 @@ export async function signUp(email, password, name) {
 
     return res;
   } catch (error) {
-    console.error('[signUp] Exceção durante signup:', error);
+    console.error('[signUp] Exceção durante signup:', {
+      message: error?.message,
+      name: error?.name,
+      stack: error?.stack
+    });
     return { error };
   }
 }
@@ -107,4 +116,27 @@ export async function getUser() {
 
 export async function signOut() {
   return await supabase.auth.signOut();
+}
+
+// Permite reenviar o email de confirmação caso o primeiro falhe ou não chegue
+export async function resendConfirmation(email) {
+  try {
+    console.log('[resendConfirmation] Reenviando email de confirmação para:', email);
+    const res = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login`
+      }
+    });
+    console.log('[resendConfirmation] Resultado:', res);
+    return res;
+  } catch (error) {
+    console.error('[resendConfirmation] Exceção ao reenviar:', {
+      message: error?.message,
+      name: error?.name,
+      stack: error?.stack
+    });
+    return { error };
+  }
 }

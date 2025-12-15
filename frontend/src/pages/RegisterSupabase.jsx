@@ -1,7 +1,7 @@
 import SimpleSidebar from '../components/SimpleSidebar';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signUp, signIn } from '../services/supabaseAuth';
+import { signUp, signIn, resendConfirmation } from '../services/supabaseAuth';
 import { supabase } from '../supabaseClient';
 
 export default function RegisterSupabase() {
@@ -11,6 +11,7 @@ export default function RegisterSupabase() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
+  const [offerResend, setOfferResend] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -18,6 +19,7 @@ export default function RegisterSupabase() {
     setLoading(true);
     setError('');
     setSuccess('');
+    setOfferResend(false);
 
     if (!name || name.trim() === '') {
       setError('Por favor, informe seu nome');
@@ -32,7 +34,12 @@ export default function RegisterSupabase() {
       
       if (res?.error) {
         console.error('[RegisterSupabase] Erro no signup:', res.error);
-        setError(res.error.message || 'Erro ao registrar');
+        const msg = res.error.message || 'Erro ao registrar';
+        setError(msg);
+        // Se for erro de envio de email, oferecer reenvio
+        if (msg?.toLowerCase().includes('error sending confirmation email')) {
+          setOfferResend(true);
+        }
         setLoading(false);
         return;
       }
@@ -140,7 +147,32 @@ export default function RegisterSupabase() {
             <div className="text-xs font-normal mt-2">Redirecionando para login...</div>
           </div>
         )}
-        {error && <div className="mt-4 text-red-400 text-sm text-center bg-red-500/20 border border-red-500/50 rounded-lg p-3 font-semibold">{error}</div>}
+        {error && (
+          <div className="mt-4 text-red-400 text-sm text-center bg-red-500/20 border border-red-500/50 rounded-lg p-3 font-semibold">
+            {error}
+            {offerResend && (
+              <div className="mt-3 flex justify-center">
+                <button
+                  onClick={async () => {
+                    setLoading(true);
+                    const r = await resendConfirmation(email);
+                    setLoading(false);
+                    if (r?.error) {
+                      setError(r.error.message || 'Falha ao reenviar. Verifique configurações de email no Supabase.');
+                    } else {
+                      setSuccess('Email de confirmação reenviado! Verifique sua caixa de entrada.');
+                      setError('');
+                      setOfferResend(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-semibold"
+                >
+                  Reenviar email de confirmação
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <div className="mt-6 text-center text-text-secondary-dark text-sm">
           Já tem conta? <button onClick={() => navigate('/login')} className="text-primary hover:text-primary/80 font-semibold transition">Entrar</button>
         </div>

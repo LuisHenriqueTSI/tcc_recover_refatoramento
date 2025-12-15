@@ -1,92 +1,36 @@
-# Sistema de Notificações por Email
+# Notificações por Email (Avistamentos)
 
-## Configuração Necessária
+## Passos de Configuração
 
-### 1. Criar conta no Resend
-1. Acesse: https://resend.com
-2. Faça signup (é grátis para testes)
-3. Copie sua API Key
+### 1) Variáveis de Ambiente nas Edge Functions
+No Supabase Dashboard, em Project Settings → Edge Functions → Environment Variables, adicione:
+- `RESEND_API_KEY`: sua API key do Resend
+- `SUPABASE_URL`: URL do projeto Supabase
+- `SUPABASE_SERVICE_ROLE_KEY`: service role key do projeto
 
-### 2. Configurar variável de ambiente no Supabase
-1. No dashboard do Supabase: Project Settings → Edge Functions
-2. Adicione a variável: `RESEND_API_KEY` com seu token do Resend
-3. Salve as mudanças
-
-### 3. Deploy da Edge Function
-No seu terminal, execute:
+### 2) Deploy da função
+No terminal, execute:
 
 ```bash
 cd frontend
-supabase functions deploy send-email-notification
+supabase functions deploy send-sighting-email
 ```
 
-Se não tiver `supabase` CLI instalado:
+Se não tiver a CLI:
 ```bash
 npm install -g supabase
 supabase login
 ```
 
-### 4. Executar SQL no Supabase
-1. Copie todo o conteúdo de `CREATE_NOTIFICATIONS_TABLE.sql`
-2. Vá para: SQL Editor → New Query
-3. Cole e execute o SQL
-4. Isso vai criar:
-   - Tabela de notificações
-   - Triggers automáticos para criar notificações
-   - Funções PostgreSQL para disparar eventos
+### 3) Garantir tabela `sightings`
+Execute o SQL de criação da tabela sightings (ajustada para `item_id BIGINT`).
 
-## Como Funciona
+### 4) Comportamento
+- Quando um avistamento é criado (`createSighting`), o frontend invoca `send-sighting-email` passando `sightingId`.
+- A função (com service role) busca o item, resolve o e-mail do proprietário via Auth Admin, e envia o e-mail via Resend.
 
-### Flow de Notificações
+### 5) Teste rápido
+Após criar um avistamento, verifique logs da função nas Edge Functions e o recebimento do e-mail.
 
-1. **Usuário avista um item**
-   - Trigger `sightings_notify_trigger` dispara automaticamente
-   - Cria notificação para o proprietário do item
-   - Sistema pode enviar email via Resend
-
-2. **Usuário recebe mensagem**
-   - Trigger `messages_notify_trigger` dispara automaticamente
-   - Cria notificação para o receptor da mensagem
-   - Sistema pode enviar email via Resend
-
-### Tipos de Notificações
-- `sighting`: Quando alguém avista um item
-- `message`: Quando recebe uma mensagem
-- `reward_claim`: Quando alguém reclama uma recompensa
-
-## Testando
-
-### Teste 1: Criar uma notificação manualmente
-```sql
-INSERT INTO notifications (
-  user_id,
-  type,
-  title,
-  message,
-  email_sent
-) VALUES (
-  'seu-user-id-aqui',
-  'sighting',
-  'Teste de Notificação',
-  'Esta é uma mensagem de teste',
-  false
-);
-```
-
-### Teste 2: Enviar um email
-Use a função `sendEmailNotification(notificationId)` no serviço `notifications.js`
-
-## Próximos Passos
-
-1. Adicionar o painel de notificações na interface
-2. Implementar notificações em tempo real (WebSocket)
-3. Permitir que usuários configurem preferências de notificação (email, SMS, etc.)
-4. Adicionar mais tipos de notificações conforme necessário
-
-## Troubleshooting
-
-Se não receber emails:
-1. Verifique a API Key do Resend
-2. Verifique se a Edge Function foi deployada corretamente
-3. Cheque os logs no Supabase (Functions → Logs)
-4. Verifique se o email está indo para SPAM
+## Dicas
+- Caso não queira chamar via frontend, você pode criar um trigger no banco que publique em uma tabela de eventos e uma função edge em cron consuma e envie e-mails em lote.

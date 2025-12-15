@@ -115,7 +115,6 @@ export default function RegisterItem() {
   const [description, setDescription] = useState(editingItem?.description || '');
   const [itemLocation, setItemLocation] = useState(editingItem?.location || '');
   const [date, setDate] = useState(editingItem?.date ? editingItem.date.split('T')[0] : '');
-  const [time, setTime] = useState('');
   const [status, setStatus] = useState(editingItem?.status || 'lost');
   const [category, setCategory] = useState(editingItem?.category || '');
 
@@ -392,7 +391,7 @@ export default function RegisterItem() {
       };
 
       if (date) {
-        itemData.date = `${date}T${time || '00:00'}:00Z`;
+        itemData.date = `${date}T00:00:00Z`;
       }
 
       let createdItemData;
@@ -599,7 +598,6 @@ export default function RegisterItem() {
                       setDescription('');
                       setItemLocation('');
                       setDate('');
-                      setTime('');
                       setStatus('lost');
                       setCategory('');
                       setBrand('');
@@ -636,7 +634,7 @@ export default function RegisterItem() {
           {/* Progress */}
           <div className="mb-8">
             <div className="flex gap-4 justify-between items-center mb-3">
-              <p className="text-white text-base font-medium">Passo {currentStep} de 3: {currentStep === 1 ? 'Detalhes do Item' : currentStep === 2 ? 'Fotos' : 'Localização e Status'}</p>
+              <p className="text-white text-base font-medium">Passo {currentStep} de 3: {currentStep === 1 ? 'Detalhes do Item' : currentStep === 2 ? 'Fotos' : 'Localização e Tipo'}</p>
             </div>
             <div className="rounded-full bg-white/10 h-2">
               <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${(currentStep / 3) * 100}%` }}></div>
@@ -729,8 +727,19 @@ export default function RegisterItem() {
               <div className="bg-surface-dark rounded-xl p-8 border border-white/10 space-y-6">
                 <h2 className="text-2xl font-bold text-white">Fotos do Item</h2>
 
+                {/* Aviso para documentos */}
+                {itemType === 'document' && (
+                  <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 px-4 py-3 rounded-lg flex items-start gap-3">
+                    <span className="material-symbols-outlined flex-shrink-0 mt-0.5">warning</span>
+                    <div>
+                      <p className="font-semibold">Documentos não podem ter fotos</p>
+                      <p className="text-sm mt-1">Por motivos de privacidade e segurança, não é permitido fazer upload de fotos de documentos. Você pode prosseguir para o próximo passo.</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Fotos Existentes */}
-                {existingPhotos.length > 0 && (
+                {existingPhotos.length > 0 && itemType !== 'document' && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3">Fotos Atuais</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6">
@@ -755,47 +764,59 @@ export default function RegisterItem() {
                   </div>
                 )}
 
-                <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-white/20 rounded-xl text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition">
-                  <span className="material-symbols-outlined text-4xl text-text-secondary-dark">upload_file</span>
-                  <p className="text-white mt-2">Arraste e solte as fotos aqui ou <span className="font-bold text-primary">clique para selecionar</span></p>
-                  <p className="text-sm text-text-secondary-dark mt-1">PNG, JPG, GIF até 10MB</p>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                </label>
+                {/* Upload habilitado apenas para não-documentos */}
+                {itemType !== 'document' && (
+                  <>
+                    <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-white/20 rounded-xl text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition">
+                      <span className="material-symbols-outlined text-4xl text-text-secondary-dark">upload_file</span>
+                      <p className="text-white mt-2">Arraste e solte as fotos aqui ou <span className="font-bold text-primary">clique para selecionar</span></p>
+                      <p className="text-sm text-text-secondary-dark mt-1">PNG, JPG, GIF até 10MB</p>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                      />
+                    </label>
 
-                {photos.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-3">Novas Fotos</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {photos.map((photo, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={photo.preview}
-                            alt={`Foto ${index + 1}`}
-                            className="aspect-square w-full rounded-lg object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removePhoto(index)}
-                            className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <span className="material-symbols-outlined text-sm">close</span>
-                          </button>
+                    {photos.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold text-white mb-3">Novas Fotos</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                          {photos.map((photo, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={photo.preview}
+                                alt={`Foto ${index + 1}`}
+                                className="aspect-square w-full rounded-lg object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removePhoto(index)}
+                                className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <span className="material-symbols-outlined text-sm">close</span>
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/30">
+                      <span className="material-symbols-outlined text-primary text-2xl">auto_awesome</span>
+                      <p className="text-text-secondary-dark text-sm">Nossa IA pode preencher os detalhes para você a partir das fotos.</p>
                     </div>
-                  </div>
+                  </>
                 )}
 
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                  <span className="material-symbols-outlined text-primary text-2xl">auto_awesome</span>
-                  <p className="text-text-secondary-dark text-sm">Nossa IA pode preencher os detalhes para você a partir das fotos.</p>
-                </div>
+                {itemType === 'document' && (
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/30">
+                    <span className="material-symbols-outlined text-primary text-2xl">info</span>
+                    <p className="text-text-secondary-dark text-sm">Você pode prosseguir ao próximo passo para finalizar o registro do documento sem fotos.</p>
+                  </div>
+                )}
 
                 <div className="flex gap-3 justify-between pt-4 border-t border-white/10">
                   <button
@@ -819,7 +840,7 @@ export default function RegisterItem() {
             {/* Step 3: Location and Status */}
             {currentStep === 3 && (
               <div className="bg-surface-dark rounded-xl p-8 border border-white/10 space-y-6">
-                <h2 className="text-2xl font-bold text-white">Localização e Status</h2>
+                <h2 className="text-2xl font-bold text-white">Localização e Tipo</h2>
 
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Endereço ou Ponto de Referência *</label>
@@ -844,19 +865,10 @@ export default function RegisterItem() {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">Horário Aproximado (opcional)</label>
-                    <input
-                      type="time"
-                      value={time}
-                      onChange={e => setTime(e.target.value)}
-                      className="w-full bg-surface-dark/60 border border-white/10 text-white rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary px-4 py-3"
-                    />
-                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">Status do Item *</label>
+                  <label className="block text-sm font-medium text-white mb-2">O item foi achado ou perdido? *</label>
                   <select
                     value={status}
                     onChange={e => setStatus(e.target.value)}
@@ -864,7 +876,8 @@ export default function RegisterItem() {
                     required
                   >
                     <option value="">Selecione uma opção</option>
-                    <option value="lost">Perdido</option>
+                    <option value="lost">Perdi este item</option>
+                    <option value="found">Achei este item</option>
                   </select>
                 </div>
 

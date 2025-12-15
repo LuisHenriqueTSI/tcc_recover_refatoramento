@@ -35,18 +35,20 @@ export async function createSighting({
     }
 
     // Inserir avistamento no banco de dados
+    // Garantir tipos corretos: item_id BIGINT, user_id UUID
+    const payload = {
+      item_id: typeof itemId === 'string' ? Number(itemId) : itemId,
+      // Se sua tabela tem default user_id := auth.uid(), você pode omitir user_id
+      user_id: userId,
+      location,
+      description,
+      contact_info: contactInfo ?? null,
+      photo_url: photoUrl
+    };
+
     const { data, error } = await supabase
       .from('sightings')
-      .insert([
-        {
-          item_id: itemId,
-          user_id: userId,
-          location,
-          description,
-          contact_info: contactInfo,
-          photo_url: photoUrl
-        }
-      ])
+      .insert([payload])
       .select();
 
     if (error) {
@@ -54,6 +56,7 @@ export async function createSighting({
       throw error;
     }
 
+    // Email será disparado automaticamente via trigger Postgres (notify-sighting)
     return { success: true, data: data[0] };
   } catch (error) {
     console.error('Erro em createSighting:', error);
@@ -77,7 +80,7 @@ export async function getSightings(itemId) {
         created_at,
         user_id
       `)
-      .eq('item_id', itemId)
+      .eq('item_id', typeof itemId === 'string' ? Number(itemId) : itemId)
       .order('created_at', { ascending: false });
 
     if (error) {
